@@ -37,6 +37,7 @@ class AnomalyEngine:
                 fps=fps,
                 dwell_radius_px=cfg.loitering.dwell_radius_px,
                 dwell_time_sec=cfg.loitering.dwell_time_sec,
+                person_only=cfg.loitering.person_only,
             )
             logger.info("Rule-based: %d loitering events", len(loitering_events))
             events.extend(loitering_events)

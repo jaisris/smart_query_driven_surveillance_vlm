@@ -47,14 +47,20 @@ class CLIPEncoder:
 
     def encode_text(self, query: str) -> np.ndarray:
         """Encode a text query. Returns L2-normalised (512,) vector."""
+        import time
+        t0 = time.time()
         prefix = self.config.clip.query_prefix
         full_query = f"{prefix} {query}" if prefix else query
+        logger.info("encode_text: input='%s'", full_query)
         inputs = self.processor(text=[full_query], return_tensors="pt", padding=True)
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
         with torch.no_grad():
             features = self.model.get_text_features(**inputs)
         vec = features.cpu().numpy()[0]
-        return _l2_normalize(vec)
+        result = _l2_normalize(vec)
+        logger.info("encode_text: output shape=%s, norm=%.4f, time=%.3fs",
+                    result.shape, float(np.linalg.norm(result)), time.time() - t0)
+        return result
 
     def encode_image_batch(self, frames_rgb: List[np.ndarray]) -> np.ndarray:
         """Encode a batch of RGB frames. Returns L2-normalised (N, 512) array."""

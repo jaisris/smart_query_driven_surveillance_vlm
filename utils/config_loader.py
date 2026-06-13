@@ -55,7 +55,8 @@ class RetrievalConfig:
 @dataclass
 class LoiteringConfig:
     dwell_radius_px: int = 80
-    dwell_time_sec: float = 10.0
+    dwell_time_sec: float = 30.0
+    person_only: bool = True
 
 
 @dataclass

@@ -9,7 +9,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from typing import List, Tuple
+import pickle
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -34,6 +35,11 @@ class CacheManager:
 
     def key(self, video_path: str, frame_skip: int, clip_model: str) -> str:
         raw = f"{os.path.abspath(video_path)}|{frame_skip}|{clip_model}"
+        return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+    def content_key(self, file_content_hash: str, frame_skip: int, clip_model: str) -> str:
+        """Cache key based on file content SHA256 — stable across re-uploads of the same video."""
+        raw = f"content:{file_content_hash}|{frame_skip}|{clip_model}"
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
     def save(
@@ -87,8 +93,31 @@ class CacheManager:
     # Internals
     # ------------------------------------------------------------------
 
+    def save_pipeline_state(self, cache_key: str, state: Dict[str, Any]) -> None:
+        """Persist track_histories + VideoMetadata so Step 1 can be skipped on re-run."""
+        pkl_path = self._tracks_path(cache_key)
+        with open(pkl_path, "wb") as f:
+            pickle.dump(state, f, protocol=pickle.HIGHEST_PROTOCOL)
+        logger.info("Track cache saved: %s", cache_key)
+
+    def load_pipeline_state(self, cache_key: str) -> Optional[Dict[str, Any]]:
+        pkl_path = self._tracks_path(cache_key)
+        if not os.path.exists(pkl_path):
+            return None
+        try:
+            with open(pkl_path, "rb") as f:
+                state = pickle.load(f)
+            logger.info("Track cache hit: %s", cache_key)
+            return state
+        except Exception as exc:
+            logger.warning("Track cache load failed (%s): %s — will re-run pipeline", cache_key, exc)
+            return None
+
     def _npy_path(self, key: str) -> str:
         return os.path.join(self.cache_dir, f"{key}.npy")
 
     def _idx_path(self, key: str) -> str:
         return os.path.join(self.cache_dir, f"{key}_index.json")
+
+    def _tracks_path(self, key: str) -> str:
+        return os.path.join(self.cache_dir, f"{key}_tracks.pkl")

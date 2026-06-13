@@ -20,22 +20,27 @@ def detect_loitering(
     track_histories: Dict[int, List[TrackSnapshot]],
     fps: float,
     dwell_radius_px: int = 80,
-    dwell_time_sec: float = 10.0,
+    dwell_time_sec: float = 30.0,
+    person_only: bool = True,
 ) -> List[AnomalyEvent]:
     events: List[AnomalyEvent] = []
+    skipped = 0
     for track_id, snapshots in track_histories.items():
         if len(snapshots) < 2:
+            continue
+        if person_only and snapshots and snapshots[0].class_name.lower() != "person":
+            skipped += 1
             continue
         track_events = _scan_track(track_id, snapshots, fps, dwell_radius_px, dwell_time_sec)
         if track_events:
             logger.debug(
-                "Track %d: %d loitering event(s) (radius=%dpx, threshold=%.1fs)",
-                track_id, len(track_events), dwell_radius_px, dwell_time_sec,
+                f"Track {track_id}: {len(track_events)} loitering event(s) "
+                f"(radius={dwell_radius_px}px, threshold={dwell_time_sec:.1f}s)"
             )
         events.extend(track_events)
     logger.info(
-        "Loitering scan: %d tracks, %d events (radius=%dpx, threshold=%.1fs)",
-        len(track_histories), len(events), dwell_radius_px, dwell_time_sec,
+        f"Loitering scan: {len(track_histories)} tracks ({skipped} non-person skipped), "
+        f"{len(events)} events (radius={dwell_radius_px}px, threshold={dwell_time_sec:.1f}s)"
     )
     return events
 

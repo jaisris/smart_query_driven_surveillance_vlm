@@ -1,5 +1,5 @@
 pipeline:
-  frame_skip: 5          # process every Nth frame (e.g. 5 → ~6fps from 30fps source)
+  frame_skip: 15         # process every Nth frame (e.g. 15 → ~2fps from 30fps source)
   batch_size: 32         # frames per CLIP batch encode
   cache_dir: ".cache"
 
@@ -37,7 +37,8 @@ anomaly:
 
   loitering:
     dwell_radius_px: 80        # spatial radius to consider "staying in place"
-    dwell_time_sec: 10.0       # how long before flagging as loitering
+    dwell_time_sec: 30.0       # how long before flagging as loitering
+    person_only: true          # only flag "person" class tracks (avoids parked-car false positives)
 
   intrusion:
     # List of forbidden zones as pixel-coordinate polygons.

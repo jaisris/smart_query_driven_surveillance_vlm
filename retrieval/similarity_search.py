@@ -67,6 +67,14 @@ class SimilaritySearch:
                     cosine_score=float(score),
                 )
             )
+        if results:
+            logger.info(
+                "FAISS search: top_k=%d returned %d results — "
+                "top score=%.3f (t=%.1fs)  lowest=%.3f (t=%.1fs)",
+                k, len(results),
+                results[0].cosine_score, results[0].timestamp_sec,
+                results[-1].cosine_score, results[-1].timestamp_sec,
+            )
         return results
 
     def save_index(self, path: str) -> None:

@@ -15,11 +15,14 @@ def localize_segments(
     results: List[SearchResult],
     gap_threshold_sec: float | None = None,
     min_segment_duration_sec: float | None = None,
+    min_score: float = 0.0,
     config: AppConfig | None = None,
 ) -> List[VideoSegment]:
     """Merge SearchResults whose timestamps are within gap_threshold_sec of each other.
 
     Returns VideoSegments sorted by peak cosine score (descending).
+    min_score filters out frames whose cosine similarity is below the threshold
+    before merging, suppressing low-confidence results.
     """
     cfg = config or get_config()
     gap = gap_threshold_sec if gap_threshold_sec is not None else cfg.retrieval.gap_threshold_sec
@@ -28,6 +31,11 @@ def localize_segments(
         if min_segment_duration_sec is not None
         else cfg.retrieval.min_segment_duration_sec
     )
+
+    if min_score > 0.0:
+        before = len(results)
+        results = [r for r in results if r.cosine_score >= min_score]
+        logger.info("Score filter (min=%.2f): kept %d / %d results", min_score, len(results), before)
 
     if not results:
         return []

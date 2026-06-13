@@ -36,11 +36,10 @@ def detect_intrusion(
     for track_id, snapshots in track_histories.items():
         track_events = _scan_track(track_id, snapshots, np_polygons)
         if track_events:
-            logger.debug("Track %d: %d intrusion event(s)", track_id, len(track_events))
+            logger.debug(f"Track {track_id}: {len(track_events)} intrusion event(s)")
         events.extend(track_events)
     logger.info(
-        "Intrusion scan: %d tracks, %d ROI zones, %d events",
-        len(track_histories), len(roi_polygons), len(events),
+        f"Intrusion scan: {len(track_histories)} tracks, {len(roi_polygons)} ROI zones, {len(events)} events"
     )
     return events
 
