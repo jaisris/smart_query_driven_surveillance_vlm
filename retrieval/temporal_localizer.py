@@ -5,7 +5,10 @@ from __future__ import annotations
 from typing import List
 
 from utils.config_loader import AppConfig, get_config
+from utils.logger import get_logger
 from utils.types import SearchResult, VideoSegment
+
+logger = get_logger(__name__)
 
 
 def localize_segments(
@@ -46,6 +49,10 @@ def localize_segments(
     # Filter by minimum duration and sort by peak score
     segments = [s for s in segments if s.duration_sec >= min_dur or len(s.frame_indices) == 1]
     segments.sort(key=lambda s: s.peak_score, reverse=True)
+    logger.info(
+        "Localised %d segments from %d search results (gap=%.1fs, min_dur=%.1fs)",
+        len(segments), len(results), gap, min_dur,
+    )
     return segments
 
 

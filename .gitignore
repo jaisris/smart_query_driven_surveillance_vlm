@@ -50,3 +50,10 @@ Thumbs.db
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Runtime logs
+logs/
+
+# Dev helper scripts
+create_test_video.py
+download_sample.py

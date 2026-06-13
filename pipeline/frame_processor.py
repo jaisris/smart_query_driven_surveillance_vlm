@@ -5,9 +5,12 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from models.yolo_detector import YOLODetector
 from models.deepsort_tracker import DeepSORTTracker
+from models.yolo_detector import YOLODetector
+from utils.logger import get_logger
 from utils.types import ProcessedFrame
+
+logger = get_logger(__name__)
 
 
 class FrameProcessor:
@@ -24,6 +27,10 @@ class FrameProcessor:
         detections = self.detector.detect(frame_bgr)
         tracks = self.tracker.update(
             detections, frame_bgr, frame_index=frame_index, timestamp_sec=timestamp_sec
+        )
+        logger.debug(
+            "frame %d (t=%.2fs): %d detections, %d active tracks",
+            frame_index, timestamp_sec, len(detections), len(tracks),
         )
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         return ProcessedFrame(

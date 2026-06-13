@@ -10,7 +10,10 @@ from __future__ import annotations
 import math
 from typing import Dict, List
 
+from utils.logger import get_logger
 from utils.types import AnomalyEvent, TrackSnapshot
+
+logger = get_logger(__name__)
 
 
 def detect_loitering(
@@ -23,9 +26,17 @@ def detect_loitering(
     for track_id, snapshots in track_histories.items():
         if len(snapshots) < 2:
             continue
-        events.extend(
-            _scan_track(track_id, snapshots, fps, dwell_radius_px, dwell_time_sec)
-        )
+        track_events = _scan_track(track_id, snapshots, fps, dwell_radius_px, dwell_time_sec)
+        if track_events:
+            logger.debug(
+                "Track %d: %d loitering event(s) (radius=%dpx, threshold=%.1fs)",
+                track_id, len(track_events), dwell_radius_px, dwell_time_sec,
+            )
+        events.extend(track_events)
+    logger.info(
+        "Loitering scan: %d tracks, %d events (radius=%dpx, threshold=%.1fs)",
+        len(track_histories), len(events), dwell_radius_px, dwell_time_sec,
+    )
     return events
 
 

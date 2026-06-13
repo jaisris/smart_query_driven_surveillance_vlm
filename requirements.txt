@@ -39,3 +39,6 @@ pytest-cov==5.0.0
 # Utilities
 tqdm==4.66.4
 scipy==1.14.0
+
+# setuptools>=72 removed pkg_resources as a top-level module; deep_sort_realtime needs it
+setuptools==69.5.1

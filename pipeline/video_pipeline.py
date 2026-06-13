@@ -20,9 +20,10 @@ from models.yolo_detector import YOLODetector
 from pipeline.embedding_builder import EmbeddingBuilder
 from pipeline.frame_processor import FrameProcessor
 from utils.config_loader import AppConfig, get_config
-from utils.logger import get_logger
+from utils.logger import get_logger, setup_logging
 from utils.types import PipelineResult, ProcessedFrame
 
+setup_logging()
 logger = get_logger(__name__)
 
 

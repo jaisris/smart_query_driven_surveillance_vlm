@@ -11,7 +11,10 @@ from typing import Dict, List, Tuple
 import cv2
 import numpy as np
 
+from utils.logger import get_logger
 from utils.types import AnomalyEvent, TrackSnapshot
+
+logger = get_logger(__name__)
 
 
 def detect_intrusion(
@@ -20,6 +23,7 @@ def detect_intrusion(
     fps: float,
 ) -> List[AnomalyEvent]:
     if not roi_polygons:
+        logger.debug("Intrusion detection skipped: no ROI zones configured.")
         return []
 
     # Convert polygon lists to numpy int32 arrays once
@@ -30,7 +34,14 @@ def detect_intrusion(
 
     events: List[AnomalyEvent] = []
     for track_id, snapshots in track_histories.items():
-        events.extend(_scan_track(track_id, snapshots, np_polygons))
+        track_events = _scan_track(track_id, snapshots, np_polygons)
+        if track_events:
+            logger.debug("Track %d: %d intrusion event(s)", track_id, len(track_events))
+        events.extend(track_events)
+    logger.info(
+        "Intrusion scan: %d tracks, %d ROI zones, %d events",
+        len(track_histories), len(roi_polygons), len(events),
+    )
     return events
 
 
