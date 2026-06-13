@@ -1,0 +1,52 @@
+# Embedding & index cache
+.cache/
+*.npy
+*.faiss
+
+# Model weights (download separately)
+weights/
+*.pt
+*.pth
+*.onnx
+
+# Video data
+data/videos/
+data/datasets/
+*.mp4
+*.avi
+*.mkv
+*.mov
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environments
+.env
+.venv
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/

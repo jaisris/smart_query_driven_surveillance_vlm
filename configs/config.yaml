@@ -1,0 +1,52 @@
+pipeline:
+  frame_skip: 5          # process every Nth frame (e.g. 5 → ~6fps from 30fps source)
+  batch_size: 32         # frames per CLIP batch encode
+  cache_dir: ".cache"
+
+video:
+  max_resolution: [1280, 720]   # resize frames if larger (w, h)
+
+yolo:
+  model: "yolov8n.pt"          # nano for speed; swap to yolov8m.pt for accuracy
+  confidence_threshold: 0.4
+  iou_threshold: 0.45
+  class_whitelist: [0, 2, 3, 5, 7]   # COCO ids: person, car, motorcycle, bus, truck
+  device: "auto"                # "auto" | "cpu" | "cuda"
+
+deepsort:
+  max_age: 30          # frames before a lost track is deleted
+  n_init: 3            # frames before a tentative track is confirmed
+  max_iou_distance: 0.7
+  max_cosine_distance: 0.3
+  nn_budget: 100
+
+clip:
+  model_name: "openai/clip-vit-base-patch32"
+  device: "auto"
+  query_prefix: "a photo of"   # prepended to text queries for better alignment
+
+retrieval:
+  top_k: 10
+  gap_threshold_sec: 2.0       # merge segments closer than this
+  min_segment_duration_sec: 1.0
+
+anomaly:
+  enable_rule_based: true
+  enable_vadclip: false        # set true once VadCLIP weights are downloaded
+  vadclip_weights: "weights/vadclip_ucf.pth"
+
+  loitering:
+    dwell_radius_px: 80        # spatial radius to consider "staying in place"
+    dwell_time_sec: 10.0       # how long before flagging as loitering
+
+  intrusion:
+    # List of forbidden zones as pixel-coordinate polygons.
+    # Each zone is a list of [x, y] points.
+    # Example: roi_zones: [[[100,100],[400,100],[400,300],[100,300]]]
+    roi_zones: []
+
+evaluation:
+  iou_threshold: 0.5           # for mAP computation
+  dataset_root: "data/datasets"
+  ucf_crime_root: "data/datasets/UCF_Crimes"
+  mot17_root: "data/datasets/MOT17"
