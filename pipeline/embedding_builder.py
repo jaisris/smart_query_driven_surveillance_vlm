@@ -14,6 +14,18 @@ from utils.types import FrameEmbedding, FrameIndexEntry, ProcessedFrame
 logger = get_logger(__name__)
 
 
+def _is_degenerate_frame(frame_rgb: np.ndarray, min_mean: float = 8.0, min_std: float = 6.0) -> bool:
+    """True for frames that carry no useful content: near-black, near-white, or flat.
+
+    Such frames (e.g. a dropped/transition frame that decodes to solid black) still
+    receive a valid CLIP embedding and can otherwise surface as spurious retrieval
+    matches, so they are excluded from the index.
+    """
+    mean = float(frame_rgb.mean())
+    std = float(frame_rgb.std())
+    return std < min_std or mean < min_mean or mean > (255.0 - min_mean)
+
+
 class EmbeddingBuilder:
     def __init__(self, encoder: CLIPEncoder, cache: CacheManager):
         self.encoder = encoder
@@ -53,12 +65,20 @@ class EmbeddingBuilder:
         if self.cache.exists(cache_key):
             return self.cache.load(cache_key)
 
-        logger.info("Cache miss — encoding %d frames in batches of %d ...", len(all_frames), batch_size)
+        # Drop degenerate (black/blank) frames so they never enter the retrieval index.
+        usable_frames = [f for f in all_frames if not _is_degenerate_frame(f.frame_rgb)]
+        skipped = len(all_frames) - len(usable_frames)
+        if skipped:
+            logger.info("Skipped %d degenerate (black/blank) frame(s) before embedding", skipped)
+        if not usable_frames:                      # safety: never index an empty video
+            usable_frames = all_frames
+
+        logger.info("Cache miss — encoding %d frames in batches of %d ...", len(usable_frames), batch_size)
         embeddings: List[np.ndarray] = []
         index_entries: List[FrameIndexEntry] = []
 
-        for start in range(0, len(all_frames), batch_size):
-            batch = all_frames[start:start + batch_size]
+        for start in range(0, len(usable_frames), batch_size):
+            batch = usable_frames[start:start + batch_size]
             batch_embs = self.build_batch(batch)
             for emb, pf in zip(batch_embs, batch):
                 embeddings.append(emb.vector)
@@ -69,7 +89,7 @@ class EmbeddingBuilder:
                         track_ids=[t.track_id for t in pf.tracks],
                     )
                 )
-            logger.info("  Encoded frames %d–%d", start, min(start + batch_size, len(all_frames)))
+            logger.info("  Encoded frames %d–%d", start, min(start + batch_size, len(usable_frames)))
 
         embedding_matrix = np.stack(embeddings, axis=0)   # (N, 512)
         self.cache.save(cache_key, embedding_matrix, index_entries)

@@ -666,16 +666,22 @@ with st.container(border=True):
         '<div style="font-size:12px;color:#94a3b8;margin:6px 0 4px;">Try a suggestion:</div>',
         unsafe_allow_html=True,
     )
+    def _use_suggestion(text: str) -> None:
+        # Runs as a button callback, i.e. before the query_text widget is
+        # re-instantiated on the next run, so assigning to the widget's
+        # session_state key here is permitted by Streamlit.
+        st.session_state.query_text = text
+
     pill_cols = st.columns(len(QUERY_SUGGESTIONS))
     for col, suggestion in zip(pill_cols, QUERY_SUGGESTIONS):
-        if col.button(
+        col.button(
             suggestion,
             key=f"pill_{suggestion}",
             use_container_width=True,
             disabled=st.session_state.pipeline_result is None,
-        ):
-            st.session_state.query_text = suggestion
-            st.rerun()
+            on_click=_use_suggestion,
+            args=(suggestion,),
+        )
 
     st.button(
         "Search",
