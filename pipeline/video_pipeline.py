@@ -6,9 +6,10 @@ Single entry point for the Streamlit UI and notebooks:
 
 from __future__ import annotations
 
+import math
 import os
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 from tqdm import tqdm
 
@@ -22,7 +23,7 @@ from pipeline.embedding_builder import EmbeddingBuilder
 from pipeline.frame_processor import FrameProcessor
 from utils.config_loader import AppConfig, get_config
 from utils.logger import get_logger, setup_logging
-from utils.types import PipelineResult, ProcessedFrame
+from utils.types import PipelineResult
 
 setup_logging()
 logger = get_logger(__name__)
@@ -56,11 +57,27 @@ class VideoPipeline:
             self._encoder = CLIPEncoder(self.config)
         return self._encoder
 
-    def run(self, video_path: str, content_hash: str | None = None) -> PipelineResult:
+    def _effective_frame_skip(self, total_frames: int) -> int:
+        """Adaptive skip: long videos raise frame_skip so at most
+        pipeline.max_indexed_frames frames are processed."""
+        base_skip = self.config.pipeline.frame_skip
+        max_frames = self.config.pipeline.max_indexed_frames
+        if max_frames <= 0:
+            return base_skip
+        adaptive = math.ceil(total_frames / max_frames)
+        return max(base_skip, adaptive)
+
+    def run(
+        self,
+        video_path: str,
+        content_hash: str | None = None,
+        progress_callback: Callable[[float, str], None] | None = None,
+    ) -> PipelineResult:
         """Process a full video and return PipelineResult.
 
         Pass content_hash (SHA256 of file bytes) to enable content-based caching so that
         re-uploading the same video skips Steps 1 and 2 entirely.
+        progress_callback(fraction, message) is invoked periodically for UI progress bars.
         """
         if not os.path.exists(video_path):
             raise FileNotFoundError(f"Video not found: {video_path}")
@@ -72,17 +89,29 @@ class VideoPipeline:
         cache = CacheManager(self.config.pipeline.cache_dir)
         embedding_builder = EmbeddingBuilder(encoder, cache)
 
+        # Metadata is needed up front to compute the adaptive frame skip
+        # (reading it only opens the container header — cheap even for 1-hour files).
+        loader = VideoLoader(video_path, self.config)
+        metadata = loader.get_metadata()
+        effective_skip = self._effective_frame_skip(metadata.total_frames)
+        if effective_skip != self.config.pipeline.frame_skip:
+            logger.info(
+                "Adaptive frame skip: %d → %d (video has %d frames, max_indexed_frames=%d)",
+                self.config.pipeline.frame_skip, effective_skip,
+                metadata.total_frames, self.config.pipeline.max_indexed_frames,
+            )
+
         # --- Cache key: prefer content hash so re-uploads of the same file hit the cache ---
         if content_hash:
             cache_key = cache.content_key(
                 content_hash,
-                self.config.pipeline.frame_skip,
+                effective_skip,
                 self.config.clip.model_name,
             )
         else:
             cache_key = cache.key(
                 video_path,
-                self.config.pipeline.frame_skip,
+                effective_skip,
                 self.config.clip.model_name,
             )
 
@@ -94,14 +123,10 @@ class VideoPipeline:
             metadata = pipeline_state["metadata"]
             embedding_matrix, frame_index_entries = cache.load(cache_key)
         else:
-            # --- Setup components ---
-            loader = VideoLoader(video_path, self.config)
-            metadata = loader.get_metadata()
             logger.info(
-                "Video: %dx%d @ %.1f fps, %.1f sec, %d frames (frame_skip=%d)",
+                "Video: %dx%d @ %.1f fps, %.1f sec, %d frames (effective_skip=%d)",
                 metadata.width, metadata.height, metadata.fps,
-                metadata.duration_sec, metadata.total_frames,
-                self.config.pipeline.frame_skip,
+                metadata.duration_sec, metadata.total_frames, effective_skip,
             )
 
             detector = self._get_detector()
@@ -109,39 +134,42 @@ class VideoPipeline:
             frame_processor = FrameProcessor(detector, tracker)
             tracker.reset()
 
-            # --- Step 1: Run detection + tracking on every frame ---
+            # --- Steps 1+2 (streaming): detection + tracking + CLIP encoding in one pass.
+            # Pixel data is dropped after each CLIP batch, so memory stays O(batch_size)
+            # regardless of video length.
             t1 = time.time()
-            logger.info("Step 1/3: YOLO detection + DeepSORT tracking (model=%s) ...", self.config.yolo.model)
-            processed_frames: list[ProcessedFrame] = []
-            total_to_process = metadata.total_frames // self.config.pipeline.frame_skip
+            logger.info(
+                "Step 1+2/3 (streaming): YOLO+DeepSORT+CLIP (yolo=%s, clip=%s, cache_key=%s...) ...",
+                self.config.yolo.model, self.config.clip.model_name, cache_key[:8],
+            )
+            embedding_builder.stream_start(
+                batch_size=self.config.pipeline.batch_size,
+                skip_static=self.config.pipeline.skip_static_frames,
+                static_diff_threshold=self.config.pipeline.static_diff_threshold,
+            )
+            total_to_process = max(1, metadata.total_frames // effective_skip)
+            processed = 0
 
             for frame_index, timestamp_sec, frame_bgr in tqdm(
-                loader.iter_frames(),
+                loader.iter_frames(frame_skip=effective_skip),
                 total=total_to_process,
-                desc="YOLO+DeepSORT",
+                desc="YOLO+DeepSORT+CLIP",
                 unit="frame",
             ):
                 pf = frame_processor.process(frame_bgr, frame_index, timestamp_sec)
-                processed_frames.append(pf)
+                embedding_builder.stream_add(pf)
+                processed += 1
+                if progress_callback is not None and processed % 25 == 0:
+                    progress_callback(
+                        min(processed / total_to_process, 1.0),
+                        f"Processing frame {processed:,} / ~{total_to_process:,}",
+                    )
 
+            embedding_matrix, frame_index_entries = embedding_builder.stream_finalize(cache_key)
             track_histories = tracker.get_track_histories()
             logger.info(
-                "Step 1/3 done in %.1fs — %d frames processed, %d unique tracks",
-                time.time() - t1, len(processed_frames), len(track_histories),
-            )
-
-            # --- Step 2: Build CLIP embeddings (cache-first) ---
-            t2 = time.time()
-            logger.info("Step 2/3: CLIP embeddings (model=%s, cache_key=%s...) ...",
-                        self.config.clip.model_name, cache_key[:8])
-            embedding_matrix, frame_index_entries = embedding_builder.build_all_from_cache_or_encode(
-                processed_frames,
-                cache_key=cache_key,
-                batch_size=self.config.pipeline.batch_size,
-            )
-            logger.info(
-                "Step 2/3 done in %.1fs — embedding matrix shape %s",
-                time.time() - t2, embedding_matrix.shape,
+                "Step 1+2/3 done in %.1fs — %d frames processed, %d embedded, %d unique tracks",
+                time.time() - t1, processed, embedding_matrix.shape[0], len(track_histories),
             )
 
             # --- Save pipeline state so next run of same video is instant ---
@@ -151,6 +179,8 @@ class VideoPipeline:
             })
 
         # --- Step 3: Run anomaly detection ---
+        if progress_callback is not None:
+            progress_callback(1.0, "Running anomaly detection …")
         t3 = time.time()
         logger.info("Step 3/3: Anomaly detection (rule_based=%s, vadclip=%s) ...",
                     self.config.anomaly.enable_rule_based, self.config.anomaly.enable_vadclip)

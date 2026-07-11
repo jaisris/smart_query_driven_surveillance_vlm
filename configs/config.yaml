@@ -2,6 +2,9 @@ pipeline:
   frame_skip: 15         # process every Nth frame (e.g. 15 → ~2fps from 30fps source)
   batch_size: 32         # frames per CLIP batch encode
   cache_dir: ".cache"
+  max_indexed_frames: 4000     # long videos auto-raise frame_skip so at most this many frames are indexed
+  skip_static_frames: true     # skip CLIP encoding for near-duplicate consecutive frames
+  static_diff_threshold: 2.0   # mean abs grayscale diff (0-255) below which a frame counts as static
 
 video:
   max_resolution: [1280, 720]   # resize frames if larger (w, h)

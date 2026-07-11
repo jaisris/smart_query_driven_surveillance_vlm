@@ -51,7 +51,24 @@ Input Video
   - Rule-based: loitering (dwell time threshold), zone intrusion (polygon ROI)
   - VadCLIP: weakly-supervised CLIP-based anomaly scoring (AAAI 2024)
 - **Embedding Cache** — CLIP frame embeddings are cached as `.npy` files; re-processing the same video is instant
+- **Long-Video Support** — streaming single-pass pipeline keeps memory flat (O(batch), ~200 MB) regardless of video length; hour-long footage is processed without buffering frames in RAM
 - **Interactive UI** — Streamlit app for upload, query, and results visualisation
+
+---
+
+## Long-Video Support
+
+The pipeline is built to handle hour-long (and longer) surveillance footage on ordinary hardware:
+
+| Mechanism | What it does |
+|-----------|--------------|
+| **Streaming encode** | Detection, tracking, and CLIP embedding happen in one pass; frame pixels are dropped as soon as each 32-frame batch is encoded — memory stays constant instead of growing with video length |
+| **Adaptive frame skip** | `pipeline.max_indexed_frames` (default 4000) automatically raises the sampling stride on long videos so the index and runtime stay bounded |
+| **Static-frame skip** | Consecutive near-identical frames (common in surveillance) are detected via a 64×64 grayscale diff and skipped before CLIP encoding |
+| **Local-path input** | The UI accepts a filesystem path in addition to browser upload, so multi-GB files never travel through the browser |
+| **Progress reporting** | A live progress bar tracks frame-by-frame processing in the UI |
+
+For GPU acceleration, run the pipeline on Google Colab with [notebooks/04_colab_gpu_pipeline.ipynb](notebooks/04_colab_gpu_pipeline.ipynb) — the produced `.cache/` artifacts are content-addressed and portable, so the local UI picks them up instantly.
 
 ---
 
@@ -204,13 +221,15 @@ All parameters are in [`configs/config.yaml`](configs/config.yaml):
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `pipeline.frame_skip` | `5` | Process every Nth frame (~6 fps from 30 fps source) |
+| `pipeline.frame_skip` | `15` | Process every Nth frame (~2 fps from 30 fps source) |
+| `pipeline.max_indexed_frames` | `4000` | Long videos auto-raise the skip so at most this many frames are indexed |
+| `pipeline.skip_static_frames` | `true` | Skip CLIP encoding for near-duplicate consecutive frames |
 | `yolo.model` | `yolov8n.pt` | `yolov8n` (fast) / `yolov8m` (accurate) |
 | `yolo.confidence_threshold` | `0.4` | Minimum detection confidence |
 | `clip.model_name` | `openai/clip-vit-base-patch32` | CLIP variant |
 | `retrieval.top_k` | `10` | Number of frames returned per query |
 | `retrieval.gap_threshold_sec` | `2.0` | Max gap to merge adjacent results into one segment |
-| `anomaly.loitering.dwell_time_sec` | `10.0` | Seconds before flagging loitering |
+| `anomaly.loitering.dwell_time_sec` | `30.0` | Seconds before flagging loitering |
 | `anomaly.loitering.dwell_radius_px` | `80` | Spatial radius for "staying in place" |
 | `anomaly.intrusion.roi_zones` | `[]` | Pixel-coordinate polygons for forbidden zones |
 | `anomaly.enable_vadclip` | `false` | Enable VadCLIP (requires pretrained weights) |
@@ -262,9 +281,41 @@ from evaluation.anomaly_metrics import evaluate_anomaly_detection
 | NL Retrieval | Precision@K, NDCG, MRR | UCA dataset |
 | Anomaly Detection | AUC-ROC | UCF-Crime |
 
-**SOTA reference on UCF-Crime (AUC-ROC):**
+### UCF-Crime anomaly evaluation (CLIP zero-shot)
+
+Runs against the Kaggle UCF-Crime frames dataset (place under `data/videos/archive/`):
+
+```bash
+python evaluation/run_ucf_eval.py --frames-per-class 500
+```
+
+Outputs AUC-ROC / AP / EER at both frame level and video level, plus an ROC curve
+(`Docs/ucf_roc_curve.png`). Note: the Kaggle frames are 64×64, well below CLIP's
+native 224×224 input, so scores are a lower bound.
+
+**Measured results (CLIP zero-shot, 6,797 frames / 243 videos, no training):**
+
+| Level | AUC-ROC | AP | EER |
+|-------|---------|----|----|
+| Frame | 0.698 | 0.967 | 0.334 |
+| Video | **0.875** | 0.912 | 0.201 |
+
+**SOTA reference on UCF-Crime (AUC-ROC, trained methods):**
 - VadCLIP (AAAI 2024): 88.02%
 - π-VAD (CVPR 2025): 90.33%
+
+Our zero-shot video-level score (87.5%) approaches trained SOTA despite using
+64×64 inputs and no UCF-Crime training data.
+
+### Long-video capacity test (measured)
+
+| Metric | Value |
+|--------|-------|
+| Test video | 3.9 hours, 1080p, 221,714 frames |
+| Peak pipeline memory | ~220 MB (flat, streaming design) |
+| Adaptive frame skip | auto-raised 15 → 278 |
+| Frames CLIP-encoded | 160 (static-frame skip removed near-duplicates) |
+| Query latency after indexing | 90–140 ms |
 
 ---
 

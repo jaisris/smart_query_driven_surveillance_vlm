@@ -53,7 +53,17 @@ htmlcov/
 
 # Runtime logs
 logs/
+*.log
 
 # Dev helper scripts
 create_test_video.py
 download_sample.py
+
+# Personal documents & signatures — never push these
+Docs/*.docx
+Docs/*.pdf
+Docs/*.pptx
+Docs/*.jpeg
+Docs/*.jpg
+Docs/jai.png
+Docs/_sample_extracted.txt

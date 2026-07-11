@@ -1,0 +1,74 @@
+{
+  "video": "C:\\Users\\MSUSERSL123\\Desktop\\ccsp\\videos\\DAY10.mp4",
+  "duration_sec": 14169.9,
+  "total_frames": 221714,
+  "frames_embedded": 160,
+  "unique_tracks": 0,
+  "anomaly_events": 0,
+  "pipeline_wall_sec": 11326.2,
+  "retrieval": [
+    {
+      "query": "a person presenting",
+      "latency_ms": 1769.0,
+      "segments": [
+        {
+          "start": 266.5,
+          "end": 266.5,
+          "score": 0.2532
+        },
+        {
+          "start": 13005.5,
+          "end": 13005.5,
+          "score": 0.2375
+        },
+        {
+          "start": 923.9,
+          "end": 923.9,
+          "score": 0.232
+        }
+      ]
+    },
+    {
+      "query": "a slide with text on screen",
+      "latency_ms": 138.7,
+      "segments": [
+        {
+          "start": 11051.2,
+          "end": 11051.2,
+          "score": 0.2552
+        },
+        {
+          "start": 266.5,
+          "end": 266.5,
+          "score": 0.2546
+        },
+        {
+          "start": 10784.6,
+          "end": 10784.6,
+          "score": 0.2479
+        }
+      ]
+    },
+    {
+      "query": "people in a meeting",
+      "latency_ms": 92.2,
+      "segments": [
+        {
+          "start": 266.5,
+          "end": 266.5,
+          "score": 0.2333
+        },
+        {
+          "start": 923.9,
+          "end": 923.9,
+          "score": 0.2191
+        },
+        {
+          "start": 106.6,
+          "end": 106.6,
+          "score": 0.2178
+        }
+      ]
+    }
+  ]
+}

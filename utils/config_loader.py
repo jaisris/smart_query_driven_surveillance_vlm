@@ -13,6 +13,9 @@ class PipelineConfig:
     frame_skip: int = 5
     batch_size: int = 32
     cache_dir: str = ".cache"
+    max_indexed_frames: int = 4000
+    skip_static_frames: bool = True
+    static_diff_threshold: float = 2.0
 
 
 @dataclass

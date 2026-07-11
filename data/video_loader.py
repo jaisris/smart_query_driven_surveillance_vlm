@@ -46,10 +46,14 @@ class VideoLoader:
             cap.release()
         return self._metadata
 
-    def iter_frames(self) -> Iterator[Tuple[int, float, np.ndarray]]:
-        """Yield (frame_index, timestamp_sec, frame_bgr) for every Nth frame."""
+    def iter_frames(self, frame_skip: int | None = None) -> Iterator[Tuple[int, float, np.ndarray]]:
+        """Yield (frame_index, timestamp_sec, frame_bgr) for every Nth frame.
+
+        frame_skip overrides config.pipeline.frame_skip when given (used for
+        adaptive skip on long videos).
+        """
         meta = self.get_metadata()
-        skip = self.config.pipeline.frame_skip
+        skip = frame_skip if frame_skip is not None else self.config.pipeline.frame_skip
         max_w, max_h = self.config.video.max_resolution
 
         cap = cv2.VideoCapture(self.video_path)

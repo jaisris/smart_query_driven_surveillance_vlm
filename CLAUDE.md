@@ -10,15 +10,19 @@ End-to-end pipeline: takes a surveillance video + natural language query → ret
 
 ```
 Input Video
-  → VideoLoader (OpenCV, every Nth frame)
-  → FrameProcessor: YOLOv8 detections + DeepSORT tracks
-  → EmbeddingBuilder: CLIP frame embeddings (cached .npy)
+  → VideoLoader (OpenCV, adaptive frame skip — long videos raise the stride)
+  → single streaming pass, O(batch) memory:
+      FrameProcessor: YOLOv8 detections + DeepSORT tracks
+      EmbeddingBuilder.stream_add(): static/degenerate-frame skip → CLIP batch encode (cached .npy)
   → FAISS IndexFlatIP (cosine similarity)
   ← text query → CLIPEncoder → query embedding
   → TemporalLocalizer → VideoSegments (start_sec, end_sec)
   → AnomalyEngine: rule-based (fast) + VadCLIP (accurate)
-  → Streamlit UI
+  → Streamlit UI (progress bar; accepts browser upload or local file path)
 ```
+
+Long-video support: pixels are dropped after each CLIP batch, so hour-plus videos
+process in constant memory (~200 MB). Verified on a 3.9-hour 1080p video.
 
 ## Module Map
 
@@ -37,6 +41,8 @@ Input Video
 | `anomaly/anomaly_engine.py` | Aggregate loitering + intrusion + VadCLIP |
 | `ui/app.py` | Streamlit demo app |
 | `evaluation/` | mAP, MOTA/IDF1, AUC-ROC metrics |
+| `evaluation/run_ucf_eval.py` | CLIP zero-shot AUC-ROC on the UCF-Crime frames dataset |
+| `notebooks/04_colab_gpu_pipeline.ipynb` | Run pipeline + eval on Colab GPU; cache is portable |
 
 ## How to Run
 
@@ -60,7 +66,9 @@ pytest tests/ -v
 ## Config
 
 All parameters live in `configs/config.yaml`. Key knobs:
-- `pipeline.frame_skip`: reduce to 1 for max accuracy, increase to 10 for speed
+- `pipeline.frame_skip`: reduce to 1 for max accuracy, increase for speed (default 15)
+- `pipeline.max_indexed_frames`: cap on indexed frames; long videos auto-raise the skip (default 4000)
+- `pipeline.skip_static_frames`: skip CLIP encoding of near-duplicate frames (default true)
 - `yolo.model`: `yolov8n.pt` (fast) / `yolov8m.pt` (accurate)
 - `anomaly.enable_vadclip`: set `true` after downloading VadCLIP weights
 - `anomaly.intrusion.roi_zones`: add pixel polygons to enable intrusion detection
@@ -78,5 +86,5 @@ All parameters live in `configs/config.yaml`. Key knobs:
 - **CLIP**: uses `transformers` library (not `openai/clip` pip package)
 - **BGR→RGB**: conversion happens in `FrameProcessor`, never in `CLIPEncoder`
 - **Bbox format**: always `[x1, y1, x2, y2]` absolute pixels throughout
-- **Cache key**: SHA256 of `(video_path, frame_skip, clip_model_name)` — delete `.cache/` to force re-encode
+- **Cache key**: SHA256 of `(file content hash or path, effective_frame_skip, clip_model_name)` — content-based, so re-uploads and cross-machine transfers hit the cache; delete `.cache/` to force re-encode
 - **VadCLIP**: anomaly detection fallback; requires pretrained weights from https://github.com/nwpu-zxr/VadCLIP

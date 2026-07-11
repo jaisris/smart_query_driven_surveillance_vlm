@@ -1,0 +1,41 @@
+{
+  "dataset": "UCF-Crime (Kaggle odins0n/ucf-crime-dataset, 64x64 extracted frames)",
+  "method": "CLIP zero-shot (openai/clip-vit-base-patch32), prompt-bank contrast scoring",
+  "note": "Frames are 64x64 which is far below CLIP's native 224x224 input; scores are a lower bound on what full-resolution frames would achieve.",
+  "frames_evaluated": 6797,
+  "frames_per_class_cap": 500,
+  "videos_evaluated": 243,
+  "frame_level": {
+    "AUC-ROC": 0.6983,
+    "AP": 0.9666,
+    "EER": 0.3337
+  },
+  "video_level": {
+    "AUC-ROC": 0.875,
+    "AP": 0.9118,
+    "EER": 0.2007
+  },
+  "normal_prompts": [
+    "a normal surveillance camera scene",
+    "an empty street seen from a CCTV camera",
+    "people walking calmly on a sidewalk",
+    "normal traffic on a road",
+    "a quiet shop interior from a security camera",
+    "an ordinary parking lot with nothing happening"
+  ],
+  "anomaly_prompts": [
+    "people fighting violently",
+    "a person attacking someone",
+    "a building on fire with flames and smoke",
+    "an explosion with a fireball",
+    "a car crash on the road",
+    "a person stealing from a store",
+    "an armed robbery in progress",
+    "a person breaking into a building",
+    "a person firing a gun",
+    "people vandalising property",
+    "police arresting a person on the ground",
+    "a person being abused or assaulted"
+  ],
+  "runtime_sec": 1173.9
+}

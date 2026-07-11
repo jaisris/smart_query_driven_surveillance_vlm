@@ -26,10 +26,118 @@ def _is_degenerate_frame(frame_rgb: np.ndarray, min_mean: float = 8.0, min_std: 
     return std < min_std or mean < min_mean or mean > (255.0 - min_mean)
 
 
+def _static_signature(frame_rgb: np.ndarray) -> np.ndarray:
+    """Tiny grayscale thumbnail used to compare consecutive frames for static content."""
+    import cv2
+    gray = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2GRAY)
+    return cv2.resize(gray, (64, 64)).astype(np.float32)
+
+
 class EmbeddingBuilder:
     def __init__(self, encoder: CLIPEncoder, cache: CacheManager):
         self.encoder = encoder
         self.cache = cache
+        self._stream_state: dict | None = None
+
+    # ------------------------------------------------------------------
+    # Streaming API — constant memory, used for long videos.
+    # The pipeline calls stream_add() once per frame and stream_finalize()
+    # at the end; pixel data is dropped as soon as each batch is encoded.
+    # ------------------------------------------------------------------
+
+    def stream_start(
+        self,
+        batch_size: int = 32,
+        skip_static: bool = True,
+        static_diff_threshold: float = 2.0,
+    ) -> None:
+        """Begin a streaming encode session."""
+        self._stream_state = {
+            "batch_size": batch_size,
+            "skip_static": skip_static,
+            "static_threshold": static_diff_threshold,
+            "buffer_rgb": [],          # pending frames for the next CLIP batch
+            "buffer_meta": [],         # (frame_index, timestamp_sec, track_ids)
+            "embeddings": [],          # encoded (512,) vectors
+            "index_entries": [],
+            "last_signature": None,    # thumbnail of the last *encoded* frame
+            "skipped_degenerate": 0,
+            "skipped_static": 0,
+        }
+
+    def stream_add(self, processed_frame: ProcessedFrame) -> None:
+        """Feed one frame into the streaming session. Encodes a batch when full."""
+        s = self._stream_state
+        if s is None:
+            raise RuntimeError("stream_start() must be called before stream_add()")
+
+        frame_rgb = processed_frame.frame_rgb
+        if _is_degenerate_frame(frame_rgb):
+            s["skipped_degenerate"] += 1
+            return
+
+        if s["skip_static"]:
+            sig = _static_signature(frame_rgb)
+            last = s["last_signature"]
+            if last is not None and float(np.abs(sig - last).mean()) < s["static_threshold"]:
+                s["skipped_static"] += 1
+                return
+            s["last_signature"] = sig
+
+        s["buffer_rgb"].append(frame_rgb)
+        s["buffer_meta"].append(
+            (
+                processed_frame.frame_index,
+                processed_frame.timestamp_sec,
+                [t.track_id for t in processed_frame.tracks],
+            )
+        )
+        if len(s["buffer_rgb"]) >= s["batch_size"]:
+            self._stream_flush()
+
+    def stream_finalize(self, cache_key: str) -> tuple[np.ndarray, List[FrameIndexEntry]]:
+        """Encode any remaining frames, save to cache, and return the results."""
+        s = self._stream_state
+        if s is None:
+            raise RuntimeError("stream_start() must be called before stream_finalize()")
+
+        self._stream_flush()
+
+        if s["skipped_degenerate"] or s["skipped_static"]:
+            logger.info(
+                "Streaming encode skipped %d degenerate + %d static frame(s)",
+                s["skipped_degenerate"], s["skipped_static"],
+            )
+
+        if not s["embeddings"]:
+            logger.warning("Streaming encode produced no embeddings — video may be blank/static")
+            embedding_matrix = np.zeros((0, 512), dtype=np.float32)
+            index_entries: List[FrameIndexEntry] = []
+        else:
+            embedding_matrix = np.stack(s["embeddings"], axis=0)  # (N, 512)
+            index_entries = s["index_entries"]
+            self.cache.save(cache_key, embedding_matrix, index_entries)
+
+        self._stream_state = None
+        return embedding_matrix, index_entries
+
+    def _stream_flush(self) -> None:
+        """Encode the pending buffer and drop its pixel data."""
+        s = self._stream_state
+        if not s["buffer_rgb"]:
+            return
+        vecs = self.encoder.encode_image_batch(s["buffer_rgb"])
+        for vec, (frame_index, timestamp_sec, track_ids) in zip(vecs, s["buffer_meta"]):
+            s["embeddings"].append(vec)
+            s["index_entries"].append(
+                FrameIndexEntry(
+                    frame_index=frame_index,
+                    timestamp_sec=timestamp_sec,
+                    track_ids=track_ids,
+                )
+            )
+        s["buffer_rgb"].clear()
+        s["buffer_meta"].clear()
 
     def build(self, processed_frame: ProcessedFrame) -> FrameEmbedding:
         """Encode a single frame. RGB conversion has already happened in FrameProcessor."""

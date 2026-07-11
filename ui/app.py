@@ -515,13 +515,22 @@ with st.container(border=True):
         label_visibility="collapsed",
     )
 
+    local_path = st.text_input(
+        "…or path to a local video file (avoids uploading large files through the browser)",
+        key="local_video_path",
+        placeholder=r"e.g.  C:\videos\camera01_full_day.mp4",
+    )
+    _local_path_valid = bool(local_path.strip()) and os.path.isfile(local_path.strip())
+    if local_path.strip() and not _local_path_valid:
+        st.warning("File not found at that path.")
+
     btn_col, _ = st.columns([2, 5])
     with btn_col:
         st.button(
             "▶  Run Pipeline",
             key="run_pipeline_btn",
             type="primary",
-            disabled=uploaded is None,
+            disabled=(uploaded is None and not _local_path_valid),
             use_container_width=True,
         )
 
@@ -569,18 +578,35 @@ with st.container(border=True):
 </div>
 """, unsafe_allow_html=True)
 
-# Pipeline execution (outside the container so rerun doesn't re-enter the border block mid-run)
-if st.session_state.get("run_pipeline_btn") and uploaded is not None:
-    # Read file bytes once — used for both content hash and temp file
-    _file_bytes = uploaded.read()
-    _content_hash = hashlib.sha256(_file_bytes).hexdigest()
+def _hash_file_chunked(path: str, chunk_mb: int = 8) -> str:
+    """SHA256 of a file read in chunks — constant memory even for GB-sized videos."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while True:
+            chunk = f.read(chunk_mb * 1024 * 1024)
+            if not chunk:
+                break
+            h.update(chunk)
+    return h.hexdigest()
 
-    with tempfile.NamedTemporaryFile(
-        delete=False, suffix=os.path.splitext(uploaded.name)[1]
-    ) as tmp:
-        tmp.write(_file_bytes)
-        tmp_path = tmp.name
-    del _file_bytes  # free memory
+
+# Pipeline execution (outside the container so rerun doesn't re-enter the border block mid-run)
+if st.session_state.get("run_pipeline_btn") and (uploaded is not None or _local_path_valid):
+    if uploaded is not None:
+        # Read file bytes once — used for both content hash and temp file
+        _file_bytes = uploaded.read()
+        _content_hash = hashlib.sha256(_file_bytes).hexdigest()
+
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=os.path.splitext(uploaded.name)[1]
+        ) as tmp:
+            tmp.write(_file_bytes)
+            tmp_path = tmp.name
+        del _file_bytes  # free memory
+    else:
+        # Local path: no copy needed; hash in chunks to keep memory flat
+        tmp_path = local_path.strip()
+        _content_hash = _hash_file_chunked(tmp_path)
 
     st.session_state.video_path      = tmp_path
     st.session_state.pipeline_result = None
@@ -603,21 +629,28 @@ if st.session_state.get("run_pipeline_btn") and uploaded is not None:
     _pipeline_ok = False
     _t_pipeline_start = time.time()
     try:
-        with st.spinner("Processing — YOLO detections · DeepSORT tracks · CLIP embeddings …"):
-            pipeline = VideoPipeline(
-                config,
-                detector=_cached_yolo(),
-                tracker=_cached_tracker(),
-                encoder=_cached_clip(),
-            )
-            result: PipelineResult = pipeline.run(tmp_path, content_hash=_content_hash)
-            st.session_state.pipeline_result = result
-            st.session_state.pipeline_time_sec = time.time() - _t_pipeline_start
-            # Detect if result came from cache (much faster than a full run)
-            st.session_state.pipeline_from_cache = (
-                st.session_state.pipeline_time_sec < 30.0
-            )
-            _pipeline_ok = True
+        _progress_bar = st.progress(0.0, text="Starting pipeline — YOLO · DeepSORT · CLIP …")
+
+        def _on_progress(frac: float, msg: str) -> None:
+            _progress_bar.progress(min(frac, 1.0), text=msg)
+
+        pipeline = VideoPipeline(
+            config,
+            detector=_cached_yolo(),
+            tracker=_cached_tracker(),
+            encoder=_cached_clip(),
+        )
+        result: PipelineResult = pipeline.run(
+            tmp_path, content_hash=_content_hash, progress_callback=_on_progress
+        )
+        _progress_bar.progress(1.0, text="Pipeline complete")
+        st.session_state.pipeline_result = result
+        st.session_state.pipeline_time_sec = time.time() - _t_pipeline_start
+        # Detect if result came from cache (much faster than a full run)
+        st.session_state.pipeline_from_cache = (
+            st.session_state.pipeline_time_sec < 30.0
+        )
+        _pipeline_ok = True
     except Exception as exc:
         tb = traceback.format_exc()
         log_records.append(f"ERROR — {exc}")
