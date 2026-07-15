@@ -15,6 +15,7 @@ yolo:
   iou_threshold: 0.45
   class_whitelist: [0, 2, 3, 5, 7]   # COCO ids: person, car, motorcycle, bus, truck
   device: "auto"                # "auto" | "cpu" | "cuda"
+  open_vocab_model: "yolov8s-worldv2.pt"   # YOLO-World v2 for query-aware boxes on result frames
 
 tracking:
   # "bytetrack" | "botsort"  → Ultralytics built-in tracking (detection+tracking in one pass)
@@ -40,6 +41,7 @@ retrieval:
   top_k: 10
   gap_threshold_sec: 2.0       # merge segments closer than this
   min_segment_duration_sec: 1.0
+  query_aware_detection: true  # run YOLO-World with the user's query terms on result frames
 
 anomaly:
   enable_rule_based: true

@@ -1,0 +1,26 @@
+{
+  "video": "data/videos/VIRAT_S_000200_00_000100_000171.mp4",
+  "note": "Same 70s VIRAT clip, frame_skip=15 (141 frames), yolov8n, CPU. DeepSORT = separate YOLO detect + re-ID tracker; ByteTrack = single YOLO.track() pass.",
+  "results": {
+    "deepsort": {
+      "wall_sec": 98.2,
+      "unique_tracks": 8,
+      "mean_track_len_frames": 71.6,
+      "max_track_len_frames": 139,
+      "tracks_per_class": {
+        "car": 7,
+        "person": 1
+      }
+    },
+    "bytetrack": {
+      "wall_sec": 67.7,
+      "unique_tracks": 8,
+      "mean_track_len_frames": 53.1,
+      "max_track_len_frames": 141,
+      "tracks_per_class": {
+        "car": 6,
+        "person": 2
+      }
+    }
+  }
+}

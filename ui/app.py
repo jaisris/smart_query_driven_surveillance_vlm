@@ -249,6 +249,17 @@ def _cached_query_encoder() -> QueryEncoder:
     return QueryEncoder(encoder=_cached_clip(), config=get_config())
 
 
+@st.cache_resource(show_spinner="Loading YOLO-World (open-vocabulary) …")
+def _cached_open_vocab():
+    """YOLO-World detector for query-aware boxes; None if unavailable."""
+    try:
+        from models.open_vocab_detector import OpenVocabDetector
+        return OpenVocabDetector(get_config())
+    except Exception as exc:
+        logging.getLogger(__name__).warning("YOLO-World unavailable: %s", exc)
+        return None
+
+
 def _tail_log(n: int = 40) -> str:
     log_path = os.path.join(os.path.dirname(__file__), "..", "logs", "surveillance.log")
     log_path = os.path.normpath(log_path)
@@ -312,6 +323,25 @@ def _draw_tracks(
                 (x1, max(y1 - 4, 0)),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1,
             )
+
+
+_OPEN_VOCAB_COLOR = (255, 0, 255)   # magenta (BGR) — visually distinct from class colours
+
+
+def _draw_open_vocab(frame_bgr: np.ndarray, detections: list) -> None:
+    """Draw YOLO-World boxes labelled with the user's own query terms."""
+    for det in detections:
+        x1, y1, x2, y2 = [int(v) for v in det.bbox_xyxy]
+        # Ignore near-whole-frame boxes (scene-level matches carry no localisation info)
+        h, w = frame_bgr.shape[:2]
+        if (x2 - x1) * (y2 - y1) > 0.6 * w * h:
+            continue
+        cv2.rectangle(frame_bgr, (x1, y1), (x2, y2), _OPEN_VOCAB_COLOR, 2)
+        label = f"{det.class_name[:24]} {det.confidence:.2f}"
+        cv2.putText(
+            frame_bgr, label, (x1, max(y1 - 6, 0)),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.45, _OPEN_VOCAB_COLOR, 1,
+        )
 
 
 _CLASS_KEYWORDS = {
@@ -836,6 +866,15 @@ if st.session_state.video_segments is not None:
                             (c for c in _COLOR_MASKS_BGR if c in _q_text), None
                         )
 
+                        # Query-aware open-vocab boxes: top segment only (CPU cost)
+                        _ov_detector = None
+                        _ov_vocab: list = []
+                        if i == 0 and _q_text and get_config().retrieval.query_aware_detection:
+                            from models.open_vocab_detector import query_to_vocabulary
+                            _ov_vocab = query_to_vocabulary(_q_text)
+                            if _ov_vocab:
+                                _ov_detector = _cached_open_vocab()
+
                         for col, frame_idx in zip(img_cols, selected_indices):
                             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
                             ret, frame_bgr = cap.read()
@@ -852,6 +891,11 @@ if st.session_state.video_segments is not None:
                                     _draw_tracks(frame_bgr, frame_idx, pr,
                                                  highlight_classes=_highlight,
                                                  highlight_track_ids=_tids)
+                                    if _ov_detector is not None:
+                                        _draw_open_vocab(
+                                            frame_bgr,
+                                            _ov_detector.detect(frame_bgr, _ov_vocab),
+                                        )
                                 except Exception:
                                     pass
                                 frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
@@ -861,6 +905,11 @@ if st.session_state.video_segments is not None:
                                     use_column_width=True,
                                 )
                         cap.release()
+                        if _ov_detector is not None:
+                            st.caption(
+                                "🟣 Magenta boxes: YOLO-World open-vocabulary detections "
+                                f"for your query terms ({', '.join(_ov_vocab[1:] or _ov_vocab)})"
+                            )
                     except Exception as _seg_exc:
                         st.caption(f"Frame preview unavailable: {_seg_exc}")
 

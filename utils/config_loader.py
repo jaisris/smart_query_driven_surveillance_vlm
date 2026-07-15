@@ -30,6 +30,7 @@ class YOLOConfig:
     iou_threshold: float = 0.45
     class_whitelist: List[int] = field(default_factory=lambda: [0, 2, 3, 5, 7])
     device: str = "auto"
+    open_vocab_model: str = "yolov8s-worldv2.pt"
 
 
 @dataclass
@@ -58,6 +59,7 @@ class RetrievalConfig:
     top_k: int = 10
     gap_threshold_sec: float = 2.0
     min_segment_duration_sec: float = 1.0
+    query_aware_detection: bool = True
 
 
 @dataclass
