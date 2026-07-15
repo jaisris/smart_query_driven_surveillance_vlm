@@ -482,7 +482,10 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     top_k         = st.slider("Top-K results", 1, 50, 20)
-    min_score     = st.slider("Min score threshold", 0.0, 0.5, 0.20, 0.01)
+    # SigLIP's sigmoid-trained similarities run far lower than CLIP's
+    # (~0.05-0.13 vs ~0.20-0.30), so the sensible threshold differs per encoder.
+    _default_min_score = 0.02 if "siglip" in get_config().clip.model_name.lower() else 0.20
+    min_score     = st.slider("Min score threshold", 0.0, 0.5, _default_min_score, 0.01)
     gap_threshold = st.slider("Segment gap (sec)", 0.5, 10.0, 2.0, 0.5)
     min_seg_dur   = st.slider("Min duration (sec)", 0.0, 5.0, 1.0, 0.5)
 

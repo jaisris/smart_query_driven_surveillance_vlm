@@ -96,6 +96,22 @@ Every pipeline stage has a baseline and an upgraded backend, switchable in `conf
 
 (Full numbers in [Docs/tracker_comparison.json](Docs/tracker_comparison.json); reproduce with `python run_tracker_ablation.py`.)
 
+### Measured encoder comparison — UCF-Crime zero-shot anomaly AUC-ROC
+
+| Encoder | Frame-level | Video-level |
+|---------|-------------|-------------|
+| **CLIP ViT-B/32** (default) | 0.698 | **0.875** |
+| SigLIP 2 base | **0.741** | 0.838 |
+
+SigLIP 2 discriminates individual frames better, but its sharper per-frame scores
+make max-pooled video-level scoring more sensitive to single-frame false positives —
+CLIP stays the default. Both retrievals rank VIRAT segments consistently; note that
+SigLIP's sigmoid-trained similarity scale runs ~5× lower than CLIP's (the UI's
+score-threshold default adapts automatically). Full numbers:
+[Docs/ucf_eval_results.json](Docs/ucf_eval_results.json),
+[Docs/ucf_eval_results_siglip2-base-patch16-224.json](Docs/ucf_eval_results_siglip2-base-patch16-224.json),
+[Docs/encoder_retrieval_comparison.json](Docs/encoder_retrieval_comparison.json).
+
 ---
 
 ## Project Structure
