@@ -199,6 +199,7 @@ def _init_state():
         "pipeline_time_sec": None,
         "pipeline_from_cache": False,
         "query_text": "",
+        "timeline": None,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -792,6 +793,15 @@ if st.session_state.get("search_btn") and query and st.session_state.pipeline_re
             _app_logger.info("Localised %d segments", len(segments))
             st.session_state.search_results = results
             st.session_state.video_segments = segments
+
+            # Full similarity timeline: query vs every indexed frame — one matmul.
+            _sims = _pr.embedding_matrix @ q_vec
+            st.session_state.timeline = {
+                "timestamps": [e.timestamp_sec for e in _pr.frame_index_entries],
+                "scores": _sims.tolist(),
+                "query": query,
+                "min_score": min_score,
+            }
     except Exception as exc:
         tb = traceback.format_exc()
         _app_logger.error("Search failed: %s", exc)
@@ -821,6 +831,67 @@ if st.session_state.video_segments is not None:
             f'<div class="step-title">Matching Segments ({count_str})</div>',
             unsafe_allow_html=True,
         )
+
+        # Similarity timeline: where in the whole video does the query match?
+        _tl = st.session_state.get("timeline")
+        if _tl and _tl.get("scores"):
+            try:
+                import altair as alt
+                import pandas as pd
+
+                _tl_df = pd.DataFrame({
+                    "time_min": [t / 60.0 for t in _tl["timestamps"]],
+                    "similarity": _tl["scores"],
+                })
+                base = alt.Chart(_tl_df).mark_area(
+                    line={"color": "#3b82f6"},
+                    color=alt.Gradient(
+                        gradient="linear",
+                        stops=[alt.GradientStop(color="#dbeafe", offset=0),
+                               alt.GradientStop(color="#93c5fd", offset=1)],
+                        x1=1, x2=1, y1=1, y2=0,
+                    ),
+                ).encode(
+                    x=alt.X("time_min:Q", title="Video time (minutes)"),
+                    y=alt.Y("similarity:Q", title="Cosine similarity",
+                            scale=alt.Scale(zero=False)),
+                    tooltip=[alt.Tooltip("time_min:Q", format=".2f", title="min"),
+                             alt.Tooltip("similarity:Q", format=".3f")],
+                )
+                threshold = alt.Chart(
+                    pd.DataFrame({"y": [_tl.get("min_score", 0.2)]})
+                ).mark_rule(color="#ef4444", strokeDash=[5, 4]).encode(y="y:Q")
+
+                layers = [base, threshold]
+                if segments:
+                    _seg_df = pd.DataFrame({
+                        "start": [s.start_sec / 60.0 for s in segments[:10]],
+                        "end": [max(s.end_sec, s.start_sec + 1) / 60.0 for s in segments[:10]],
+                    })
+                    layers.append(
+                        alt.Chart(_seg_df).mark_rect(
+                            color="#22c55e", opacity=0.18
+                        ).encode(x="start:Q", x2="end:Q")
+                    )
+                _anoms = st.session_state.pipeline_result.anomaly_events
+                if _anoms:
+                    _an_df = pd.DataFrame({"t": [a.start_sec / 60.0 for a in _anoms]})
+                    layers.append(
+                        alt.Chart(_an_df).mark_rule(
+                            color="#f59e0b", strokeWidth=2
+                        ).encode(x="t:Q")
+                    )
+                st.altair_chart(
+                    alt.layer(*layers).properties(height=180),
+                    use_container_width=True,
+                )
+                st.caption(
+                    f'Similarity of "{_tl["query"]}" across the full video · '
+                    "green bands = matched segments · red dashes = score threshold"
+                    + (" · orange lines = anomaly events" if _anoms else "")
+                )
+            except Exception as _tl_exc:
+                st.caption(f"Timeline unavailable: {_tl_exc}")
 
         if not segments:
             st.info("No segments matched. Try adjusting search params or rephrasing the query.")
@@ -910,6 +981,25 @@ if st.session_state.video_segments is not None:
                                 "🟣 Magenta boxes: YOLO-World open-vocabulary detections "
                                 f"for your query terms ({', '.join(_ov_vocab[1:] or _ov_vocab)})"
                             )
+
+                        # Click-to-play: embedded player that jumps to this segment
+                        if st.checkbox(
+                            f"▶ Play this segment ({seg.start_sec:.0f}s – {seg.end_sec:.0f}s)",
+                            key=f"play_seg_{i}",
+                        ):
+                            try:
+                                st.video(
+                                    st.session_state.video_path,
+                                    start_time=int(seg.start_sec),
+                                    end_time=int(seg.end_sec) + 2,
+                                    muted=True,
+                                    autoplay=True,
+                                )
+                            except Exception as _vid_exc:
+                                st.caption(
+                                    f"In-browser playback unavailable ({_vid_exc}). "
+                                    "Browser playback requires an H.264 .mp4 file."
+                                )
                     except Exception as _seg_exc:
                         st.caption(f"Frame preview unavailable: {_seg_exc}")
 
