@@ -33,6 +33,11 @@ class YOLOConfig:
 
 
 @dataclass
+class TrackingConfig:
+    backend: str = "bytetrack"   # "bytetrack" | "botsort" | "deepsort"
+
+
+@dataclass
 class DeepSORTConfig:
     max_age: int = 30
     n_init: int = 3
@@ -89,6 +94,7 @@ class AppConfig:
     pipeline: PipelineConfig = field(default_factory=PipelineConfig)
     video: VideoConfig = field(default_factory=VideoConfig)
     yolo: YOLOConfig = field(default_factory=YOLOConfig)
+    tracking: TrackingConfig = field(default_factory=TrackingConfig)
     deepsort: DeepSORTConfig = field(default_factory=DeepSORTConfig)
     clip: CLIPConfig = field(default_factory=CLIPConfig)
     retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)

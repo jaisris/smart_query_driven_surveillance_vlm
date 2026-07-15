@@ -218,7 +218,11 @@ _app_logger = logging.getLogger("ui.app")
 # ------------------------------------------------------------------ #
 
 @st.cache_resource(show_spinner="Loading YOLO model …")
-def _cached_yolo() -> "YOLODetector":
+def _cached_yolo() -> "YOLODetector | None":
+    # Combined tracking backends (bytetrack/botsort) run detection inside the
+    # tracker; a separate YOLO detector is only used for the DeepSORT baseline.
+    if get_config().tracking.backend != "deepsort":
+        return None
     from models.yolo_detector import YOLODetector
     return YOLODetector(get_config())
 
@@ -230,9 +234,13 @@ def _cached_clip() -> "CLIPEncoder":
 
 
 @st.cache_resource(show_spinner=False)
-def _cached_tracker() -> "DeepSORTTracker":
-    from models.deepsort_tracker import DeepSORTTracker
-    return DeepSORTTracker(get_config())
+def _cached_tracker():
+    cfg = get_config()
+    if cfg.tracking.backend == "deepsort":
+        from models.deepsort_tracker import DeepSORTTracker
+        return DeepSORTTracker(cfg)
+    from models.ultralytics_tracker import UltralyticsTracker
+    return UltralyticsTracker(cfg)
 
 
 @st.cache_resource(show_spinner=False)

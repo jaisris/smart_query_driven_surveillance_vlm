@@ -47,9 +47,13 @@ class VideoPipeline:
             self._detector = YOLODetector(self.config)
         return self._detector
 
-    def _get_tracker(self) -> DeepSORTTracker:
+    def _get_tracker(self):
         if self._tracker is None:
-            self._tracker = DeepSORTTracker(self.config)
+            if self.config.tracking.backend == "deepsort":
+                self._tracker = DeepSORTTracker(self.config)
+            else:
+                from models.ultralytics_tracker import UltralyticsTracker
+                self._tracker = UltralyticsTracker(self.config)
         return self._tracker
 
     def _get_encoder(self) -> CLIPEncoder:
@@ -129,8 +133,10 @@ class VideoPipeline:
                 metadata.duration_sec, metadata.total_frames, effective_skip,
             )
 
-            detector = self._get_detector()
             tracker = self._get_tracker()
+            # Combined backends (bytetrack/botsort) detect inside the tracker;
+            # a separate YOLO detector is only needed for the DeepSORT baseline.
+            detector = self._get_detector() if not hasattr(tracker, "detect_and_track") else None
             frame_processor = FrameProcessor(detector, tracker)
             tracker.reset()
 

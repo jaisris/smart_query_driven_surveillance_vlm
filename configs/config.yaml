@@ -16,6 +16,11 @@ yolo:
   class_whitelist: [0, 2, 3, 5, 7]   # COCO ids: person, car, motorcycle, bus, truck
   device: "auto"                # "auto" | "cpu" | "cuda"
 
+tracking:
+  # "bytetrack" | "botsort"  → Ultralytics built-in tracking (detection+tracking in one pass)
+  # "deepsort"               → original DeepSORT baseline (separate YOLO detect + re-ID tracker)
+  backend: "bytetrack"
+
 deepsort:
   max_age: 30          # frames before a lost track is deleted
   n_init: 3            # frames before a tentative track is confirmed
