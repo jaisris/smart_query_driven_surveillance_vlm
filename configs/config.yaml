@@ -24,6 +24,9 @@ deepsort:
   nn_budget: 100
 
 clip:
+  # Retrieval encoder — either family works, cache auto-invalidates on change:
+  #   "openai/clip-vit-base-patch32"        CLIP baseline, 512-d, fastest
+  #   "google/siglip2-base-patch16-224"     SigLIP 2 (2025), 768-d, better zero-shot retrieval
   model_name: "openai/clip-vit-base-patch32"
   device: "auto"
   query_prefix: "a photo of"   # prepended to text queries for better alignment

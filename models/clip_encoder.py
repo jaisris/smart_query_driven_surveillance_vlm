@@ -1,7 +1,10 @@
-"""CLIP encoder for image frames and text queries.
+"""Vision-language encoder for image frames and text queries.
 
-Uses HuggingFace transformers (not the openai/clip pip package).
-All outputs are L2-normalised float32 numpy arrays of shape (512,).
+Supports two model families via HuggingFace transformers:
+  - CLIP   (e.g. openai/clip-vit-base-patch32, 512-d)
+  - SigLIP / SigLIP 2 (e.g. google/siglip2-base-patch16-224, 768-d)
+
+All outputs are L2-normalised float32 numpy arrays of shape (embedding_dim,).
 """
 
 from __future__ import annotations
@@ -30,29 +33,53 @@ class CLIPEncoder:
         self.config = config or get_config()
         self.device = _resolve_device(self.config.clip.device)
         model_name = self.config.clip.model_name
+        self.is_siglip = "siglip" in model_name.lower()
 
-        logger.info("Loading CLIP model '%s' on %s ...", model_name, self.device)
-        self.processor = CLIPProcessor.from_pretrained(model_name)
-        self.model = CLIPModel.from_pretrained(model_name).to(self.device)
+        logger.info("Loading %s model '%s' on %s ...",
+                    "SigLIP" if self.is_siglip else "CLIP", model_name, self.device)
+        if self.is_siglip:
+            from transformers import AutoModel, AutoProcessor
+            self.processor = AutoProcessor.from_pretrained(model_name)
+            self.model = AutoModel.from_pretrained(model_name).to(self.device)
+        else:
+            self.processor = CLIPProcessor.from_pretrained(model_name)
+            self.model = CLIPModel.from_pretrained(model_name).to(self.device)
         self.model.eval()
-        logger.info("CLIP model loaded.")
+        logger.info("Encoder loaded (embedding_dim=%d).", self.embedding_dim)
+
+    @property
+    def embedding_dim(self) -> int:
+        """Output vector dimensionality (CLIP: projection_dim, SigLIP: hidden_size)."""
+        cfg = self.model.config
+        dim = getattr(cfg, "projection_dim", None)
+        if not dim:
+            dim = cfg.text_config.hidden_size
+        return int(dim)
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
     def encode_image(self, frame_rgb: np.ndarray) -> np.ndarray:
-        """Encode a single RGB frame. Returns L2-normalised (512,) vector."""
+        """Encode a single RGB frame. Returns L2-normalised (embedding_dim,) vector."""
         return self.encode_image_batch([frame_rgb])[0]
 
     def encode_text(self, query: str) -> np.ndarray:
-        """Encode a text query. Returns L2-normalised (512,) vector."""
+        """Encode a text query. Returns L2-normalised (embedding_dim,) vector."""
         import time
         t0 = time.time()
         prefix = self.config.clip.query_prefix
         full_query = f"{prefix} {query}" if prefix else query
         logger.info("encode_text: input='%s'", full_query)
-        inputs = self.processor(text=[full_query], return_tensors="pt", padding=True)
+        if self.is_siglip:
+            # SigLIP was trained with fixed-length padded text; anything else
+            # degrades its text embeddings badly.
+            inputs = self.processor(
+                text=[full_query], return_tensors="pt",
+                padding="max_length", max_length=64, truncation=True,
+            )
+        else:
+            inputs = self.processor(text=[full_query], return_tensors="pt", padding=True)
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
         with torch.no_grad():
             features = self.model.get_text_features(**inputs)
@@ -63,7 +90,7 @@ class CLIPEncoder:
         return result
 
     def encode_image_batch(self, frames_rgb: List[np.ndarray]) -> np.ndarray:
-        """Encode a batch of RGB frames. Returns L2-normalised (N, 512) array."""
+        """Encode a batch of RGB frames. Returns L2-normalised (N, embedding_dim) array."""
         pil_images = [Image.fromarray(f) for f in frames_rgb]
         inputs = self.processor(images=pil_images, return_tensors="pt", padding=True)
         inputs = {k: v.to(self.device) for k, v in inputs.items()}

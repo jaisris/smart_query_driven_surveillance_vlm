@@ -117,7 +117,7 @@ class EmbeddingBuilder:
 
         if not s["embeddings"]:
             logger.warning("Streaming encode produced no embeddings — video may be blank/static")
-            embedding_matrix = np.zeros((0, 512), dtype=np.float32)
+            embedding_matrix = np.zeros((0, self.encoder.embedding_dim), dtype=np.float32)
             index_entries: List[FrameIndexEntry] = []
         else:
             embedding_matrix = np.stack(s["embeddings"], axis=0)  # (N, 512)
