@@ -74,16 +74,27 @@ For GPU acceleration, run the pipeline on Google Colab with [notebooks/04_colab_
 
 ## Tech Stack
 
-| Component | Library |
-|-----------|---------|
-| Object Detection | [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics) |
-| Multi-Object Tracking | [DeepSORT Realtime](https://github.com/levan92/deep_sort_realtime) |
-| Vision-Language Model | [CLIP via HuggingFace Transformers](https://huggingface.co/openai/clip-vit-base-patch32) |
-| Similarity Search | [FAISS](https://github.com/facebookresearch/faiss) |
-| Anomaly Detection | [VadCLIP (AAAI 2024)](https://github.com/nwpu-zxr/VadCLIP) |
-| UI | [Streamlit](https://streamlit.io) |
-| Deep Learning | PyTorch 2.3.1 |
-| Video I/O | OpenCV 4.10 |
+Every pipeline stage has a baseline and an upgraded backend, switchable in `configs/config.yaml`:
+
+| Component | Baseline | Upgrade option |
+|-----------|----------|----------------|
+| Object Detection | [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics) | [YOLO-World v2](https://docs.ultralytics.com/models/yolo-world) open-vocabulary (query-aware boxes) |
+| Multi-Object Tracking | [DeepSORT Realtime](https://github.com/levan92/deep_sort_realtime) | ByteTrack / BoT-SORT ([Ultralytics track mode](https://docs.ultralytics.com/modes/track)) — **default** |
+| Vision-Language Model | [CLIP ViT-B/32](https://huggingface.co/openai/clip-vit-base-patch32) — **default** | [SigLIP 2](https://huggingface.co/google/siglip2-base-patch16-224) (`clip.model_name`) |
+| Similarity Search | [FAISS](https://github.com/facebookresearch/faiss) | — |
+| Anomaly Detection | Rule-based + CLIP zero-shot | [VadCLIP (AAAI 2024)](https://github.com/nwpu-zxr/VadCLIP) (weights required) |
+| UI | [Streamlit](https://streamlit.io) | — |
+| Deep Learning | PyTorch 2.3.1 | — |
+| Video I/O | OpenCV 4.10 | — |
+
+### Measured backend comparison (VIRAT 70s clip, CPU)
+
+| Tracking backend | Wall time | Tracks | Persons found | Max track length |
+|------------------|-----------|--------|---------------|------------------|
+| DeepSORT (baseline) | 98.2 s | 8 | 1 | 139/141 frames |
+| **ByteTrack** (default) | **67.7 s** | 8 | **2** | **141/141 frames** |
+
+(Full numbers in [Docs/tracker_comparison.json](Docs/tracker_comparison.json); reproduce with `python run_tracker_ablation.py`.)
 
 ---
 

@@ -32,9 +32,11 @@ process in constant memory (~200 MB). Verified on a 3.9-hour 1080p video.
 | `utils/config_loader.py` | Loads `configs/config.yaml` → `AppConfig` |
 | `data/video_loader.py` | Frame iterator over a video file |
 | `data/cache_manager.py` | Save/load `.npy` embeddings + `index.json` |
-| `models/clip_encoder.py` | CLIP image + text encoder (HuggingFace transformers) |
-| `models/yolo_detector.py` | YOLOv8 wrapper → `List[Detection]` |
-| `models/deepsort_tracker.py` | DeepSORT wrapper → `List[Track]` + track histories |
+| `models/clip_encoder.py` | CLIP **or SigLIP 2** image + text encoder (`clip.model_name`) |
+| `models/yolo_detector.py` | YOLOv8 wrapper → `List[Detection]` (DeepSORT path only) |
+| `models/deepsort_tracker.py` | DeepSORT baseline tracker (`tracking.backend: deepsort`) |
+| `models/ultralytics_tracker.py` | ByteTrack/BoT-SORT combined detect+track (default backend) |
+| `models/open_vocab_detector.py` | YOLO-World v2 — query terms become detection vocabulary |
 | `pipeline/video_pipeline.py` | Top-level orchestrator → `PipelineResult` |
 | `retrieval/similarity_search.py` | FAISS index build + query search |
 | `retrieval/temporal_localizer.py` | Merge top-K frames into segments |
@@ -69,6 +71,9 @@ All parameters live in `configs/config.yaml`. Key knobs:
 - `pipeline.frame_skip`: reduce to 1 for max accuracy, increase for speed (default 15)
 - `pipeline.max_indexed_frames`: cap on indexed frames; long videos auto-raise the skip (default 4000)
 - `pipeline.skip_static_frames`: skip CLIP encoding of near-duplicate frames (default true)
+- `tracking.backend`: `bytetrack` (default) | `botsort` | `deepsort` (baseline for ablation)
+- `clip.model_name`: `openai/clip-vit-base-patch32` (default) | `google/siglip2-base-patch16-224`
+- `retrieval.query_aware_detection`: YOLO-World boxes labelled with query terms on top result (default true)
 - `yolo.model`: `yolov8n.pt` (fast) / `yolov8m.pt` (accurate)
 - `anomaly.enable_vadclip`: set `true` after downloading VadCLIP weights
 - `anomaly.intrusion.roi_zones`: add pixel polygons to enable intrusion detection
