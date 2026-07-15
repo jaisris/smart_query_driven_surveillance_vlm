@@ -1,30 +1,28 @@
 {
-  "video": "C:\\Users\\MSUSERSL123\\Downloads\\videoplayback.mp4",
+  "video": "data/videos/VIRAT_S_000200_00_000100_000171.mp4",
   "config": {
     "frame_skip": 15,
     "yolo_model": "yolov8n.pt",
     "clip_model": "openai/clip-vit-base-patch32",
     "top_k": 10
   },
-  "wall_time_sec": 381.3,
+  "wall_time_sec": 57.3,
   "video_metadata": {
-    "width": 640,
-    "height": 360,
+    "width": 1280,
+    "height": 720,
     "fps": 30.0,
-    "duration_sec": 58.4,
-    "total_frames": 1751
+    "duration_sec": 70.5,
+    "total_frames": 2114
   },
-  "frames_embedded": 108,
+  "frames_embedded": 44,
   "embedding_dim": 512,
   "tracking": {
-    "unique_tracks": 117,
-    "mean_track_len_frames": 44.17,
-    "max_track_len_frames": 102,
+    "unique_tracks": 8,
+    "mean_track_len_frames": 71.62,
+    "max_track_len_frames": 139,
     "tracks_per_class": {
-      "car": 108,
-      "bus": 5,
-      "person": 3,
-      "truck": 1
+      "car": 7,
+      "person": 1
     }
   },
   "anomaly": {
@@ -35,82 +33,87 @@
   "retrieval": [
     {
       "query": "buses passing",
-      "latency_ms": 880.5,
+      "latency_ms": 430.3,
       "n_results": 10,
-      "top_score": 0.3061,
-      "top_timestamp_sec": 55.5,
-      "lowest_score": 0.2959,
-      "n_segments": 2,
+      "top_score": 0.2359,
+      "top_timestamp_sec": 7.0,
+      "lowest_score": 0.2318,
+      "n_segments": 3,
       "segments": [
         {
-          "start": 54.0,
-          "end": 55.5,
-          "peak_score": 0.3061
+          "start": 5.0,
+          "end": 12.0,
+          "peak_score": 0.2359
         },
         {
-          "start": 36.5,
-          "end": 38.5,
-          "peak_score": 0.3003
+          "start": 17.0,
+          "end": 17.0,
+          "peak_score": 0.2327
+        },
+        {
+          "start": 0.0,
+          "end": 2.0,
+          "peak_score": 0.2324
         }
       ]
     },
     {
       "query": "person walking",
-      "latency_ms": 45.5,
+      "latency_ms": 26.4,
       "n_results": 10,
-      "top_score": 0.246,
+      "top_score": 0.2309,
       "top_timestamp_sec": 17.0,
-      "lowest_score": 0.2355,
-      "n_segments": 3,
+      "lowest_score": 0.2264,
+      "n_segments": 4,
       "segments": [
         {
-          "start": 14.5,
+          "start": 17.0,
           "end": 18.0,
-          "peak_score": 0.246
+          "peak_score": 0.2309
         },
         {
-          "start": 21.5,
-          "end": 22.5,
-          "peak_score": 0.2371
+          "start": 6.5,
+          "end": 7.5,
+          "peak_score": 0.2304
         },
         {
-          "start": 12.0,
-          "end": 12.0,
-          "peak_score": 0.2358
+          "start": 11.0,
+          "end": 13.0,
+          "peak_score": 0.23
+        },
+        {
+          "start": 59.5,
+          "end": 61.0,
+          "peak_score": 0.2293
         }
       ]
     },
     {
       "query": "cars colliding",
-      "latency_ms": 41.2,
+      "latency_ms": 27.3,
       "n_results": 10,
-      "top_score": 0.3097,
-      "top_timestamp_sec": 11.0,
-      "lowest_score": 0.3072,
-      "n_segments": 4,
+      "top_score": 0.2384,
+      "top_timestamp_sec": 18.0,
+      "lowest_score": 0.2344,
+      "n_segments": 3,
       "segments": [
         {
-          "start": 9.5,
-          "end": 11.5,
-          "peak_score": 0.3097
+          "start": 17.0,
+          "end": 18.5,
+          "peak_score": 0.2384
         },
         {
           "start": 29.0,
-          "end": 33.5,
-          "peak_score": 0.3091
+          "end": 29.0,
+          "peak_score": 0.2368
         },
         {
-          "start": 58.0,
-          "end": 58.0,
-          "peak_score": 0.3088
-        },
-        {
-          "start": 52.5,
-          "end": 53.5,
-          "peak_score": 0.3075
+          "start": 11.0,
+          "end": 13.0,
+          "peak_score": 0.2365
         }
       ]
     }
   ],
-  "throughput_fps": 0.283
+  "throughput_fps": 0.768
 }

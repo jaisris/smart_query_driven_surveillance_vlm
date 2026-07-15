@@ -79,9 +79,15 @@ class EmbeddingBuilder:
         if s["skip_static"]:
             sig = _static_signature(frame_rgb)
             last = s["last_signature"]
-            if last is not None and float(np.abs(sig - last).mean()) < s["static_threshold"]:
-                s["skipped_static"] += 1
-                return
+            if last is not None:
+                # Fraction (%) of thumbnail pixels that changed noticeably. This detects
+                # small moving objects (a person is ~0.4% of a wide surveillance shot)
+                # that a mean-difference test would average away, while staying immune
+                # to codec noise, which rarely shifts a downscaled pixel by >12 levels.
+                changed_pct = float((np.abs(sig - last) > 12.0).mean()) * 100.0
+                if changed_pct < s["static_threshold"]:
+                    s["skipped_static"] += 1
+                    return
             s["last_signature"] = sig
 
         s["buffer_rgb"].append(frame_rgb)
