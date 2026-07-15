@@ -158,11 +158,24 @@ def main() -> None:
     parser.add_argument("--frames-per-class", type=int, default=500)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--out-dir", default="Docs")
+    parser.add_argument(
+        "--model-name", default=None,
+        help="Override clip.model_name (e.g. google/siglip2-base-patch16-224) "
+             "for encoder ablations; output filenames get a model suffix.",
+    )
     args = parser.parse_args()
 
     if not os.path.isdir(args.data_root):
         raise SystemExit(f"Dataset not found: {args.data_root}")
     os.makedirs(args.out_dir, exist_ok=True)
+
+    config = get_config()
+    if args.model_name:
+        config.clip.model_name = args.model_name
+    model_name = config.clip.model_name
+    # e.g. "siglip2-base-patch16-224" — used to keep ablation outputs apart
+    model_slug = model_name.split("/")[-1]
+    is_baseline = model_name == "openai/clip-vit-base-patch32"
 
     t_start = time.time()
     samples = collect_frames(args.data_root, args.frames_per_class)
@@ -171,7 +184,7 @@ def main() -> None:
                 len(samples), int(labels.sum()), int((labels == 0).sum()),
                 len(set(p.split(os.sep)[-2] for p, _, _ in samples)))
 
-    encoder = CLIPEncoder(get_config())
+    encoder = CLIPEncoder(config)
     frame_vecs = encode_frames(encoder, samples, batch_size=args.batch_size)
     scores = zero_shot_scores(encoder, frame_vecs)
 
@@ -182,14 +195,15 @@ def main() -> None:
     logger.info("Frame-level:  %s", frame_metrics)
     logger.info("Video-level:  %s  (%d videos)", video_metrics, len(vid_true))
 
-    roc_path = os.path.join(args.out_dir, "ucf_roc_curve.png")
+    suffix = "" if is_baseline else f"_{model_slug}"
+    roc_path = os.path.join(args.out_dir, f"ucf_roc_curve{suffix}.png")
     plot_roc(labels.tolist(), scores.tolist(), frame_metrics["AUC-ROC"], roc_path)
 
     results = {
         "dataset": "UCF-Crime (Kaggle odins0n/ucf-crime-dataset, 64x64 extracted frames)",
-        "method": "CLIP zero-shot (openai/clip-vit-base-patch32), prompt-bank contrast scoring",
+        "method": f"Zero-shot ({model_name}), prompt-bank contrast scoring",
         "note": (
-            "Frames are 64x64 which is far below CLIP's native 224x224 input; "
+            "Frames are 64x64 which is far below the encoder's native input size; "
             "scores are a lower bound on what full-resolution frames would achieve."
         ),
         "frames_evaluated": len(samples),
@@ -201,12 +215,12 @@ def main() -> None:
         "anomaly_prompts": ANOMALY_PROMPTS,
         "runtime_sec": round(time.time() - t_start, 1),
     }
-    out_json = os.path.join(args.out_dir, "ucf_eval_results.json")
+    out_json = os.path.join(args.out_dir, f"ucf_eval_results{suffix}.json")
     with open(out_json, "w") as f:
         json.dump(results, f, indent=2)
     logger.info("Results saved to %s (total runtime %.1fs)", out_json, results["runtime_sec"])
 
-    print("\n=== UCF-Crime CLIP Zero-Shot Evaluation ===")
+    print(f"\n=== UCF-Crime Zero-Shot Evaluation ({model_slug}) ===")
     print(f"Frames: {len(samples)}   Videos: {len(vid_true)}")
     print(f"Frame-level: {frame_metrics}")
     print(f"Video-level: {video_metrics}")
