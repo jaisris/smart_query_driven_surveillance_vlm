@@ -32,6 +32,43 @@ from retrieval.temporal_localizer import localize_segments
 from utils.config_loader import get_config
 from utils.types import AnomalyEvent, PipelineResult, VideoSegment
 
+
+def _extract_segment_clip(video_path: str, start_sec: float, end_sec: float) -> str | None:
+    """Cut a short standalone clip for one segment via ffmpeg stream-copy.
+
+    st.video()'s start_time/end_time seek into the full video unreliably for
+    large local files in this Streamlit version (1.37.0) — in practice it was
+    observed to just play from the beginning instead of seeking. A stream-copy
+    trim (no re-encode, ~0.1s even on a 1.7GB source) sidesteps that entirely:
+    the clip IS the segment, so playback always starts at its own t=0.
+    Cached on disk per (video, start, end) so repeat toggles are instant.
+    """
+    import subprocess
+    import imageio_ffmpeg
+
+    cache_dir = os.path.join(tempfile.gettempdir(), "surveillance_clip_cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    key = hashlib.sha256(f"{video_path}|{start_sec}|{end_sec}".encode()).hexdigest()[:16]
+    out_path = os.path.join(cache_dir, f"{key}.mp4")
+    if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
+        return out_path
+
+    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    duration = max(end_sec - start_sec, 1.0)
+    result = subprocess.run(
+        [ffmpeg, "-y", "-ss", str(max(start_sec, 0)), "-i", video_path,
+         "-t", str(duration), "-c", "copy", out_path],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0 or not os.path.exists(out_path):
+        logging.getLogger(__name__).warning(
+            "Clip extraction failed for %s [%s-%s]: %s",
+            video_path, start_sec, end_sec, result.stderr[-300:],
+        )
+        return None
+    return out_path
+
+
 # ------------------------------------------------------------------ #
 #  Page config  (must be the first Streamlit call)
 # ------------------------------------------------------------------ #
@@ -1039,19 +1076,23 @@ if st.session_state.video_segments is not None:
                         if _cached_render["ov_caption"]:
                             st.caption(_cached_render["ov_caption"])
 
-                        # Click-to-play: embedded player that jumps to this segment
+                        # Click-to-play: a real standalone clip for just this segment
+                        # (see _extract_segment_clip for why — st.video's start_time/
+                        # end_time don't reliably seek large local files in this
+                        # Streamlit version, so we cut a small clip instead).
                         if st.checkbox(
                             f"▶ Play this segment ({seg.start_sec:.0f}s – {seg.end_sec:.0f}s)",
                             key=f"play_seg_{i}",
                         ):
                             try:
-                                st.video(
+                                clip_path = _extract_segment_clip(
                                     st.session_state.video_path,
-                                    start_time=int(seg.start_sec),
-                                    end_time=int(seg.end_sec) + 2,
-                                    muted=True,
-                                    autoplay=True,
+                                    seg.start_sec, seg.end_sec + 2,
                                 )
+                                if clip_path:
+                                    st.video(clip_path, muted=True, autoplay=True, loop=True)
+                                else:
+                                    st.caption("Could not extract this segment's clip.")
                             except Exception as _vid_exc:
                                 st.caption(
                                     f"In-browser playback unavailable ({_vid_exc}). "
