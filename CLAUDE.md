@@ -35,7 +35,7 @@ process in constant memory (~200 MB). Verified on a 3.9-hour 1080p video.
 | `models/clip_encoder.py` | CLIP **or SigLIP 2** image + text encoder (`clip.model_name`) |
 | `models/yolo_detector.py` | YOLOv8 wrapper → `List[Detection]` (DeepSORT path only) |
 | `models/deepsort_tracker.py` | DeepSORT baseline tracker (`tracking.backend: deepsort`) |
-| `models/ultralytics_tracker.py` | ByteTrack/BoT-SORT combined detect+track (default backend) |
+| `models/ultralytics_tracker.py` | YOLO.predict() + custom greedy IOU linker (default backend — see file docstring: Ultralytics' persist=True tracking silently drops most detections on sparsely-sampled video, so it's not used) |
 | `models/open_vocab_detector.py` | YOLO-World v2 — query terms become detection vocabulary |
 | `pipeline/video_pipeline.py` | Top-level orchestrator → `PipelineResult` |
 | `retrieval/similarity_search.py` | FAISS index build + query search |

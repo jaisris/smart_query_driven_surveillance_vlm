@@ -1,9 +1,9 @@
 {
   "video": "data/videos/VIRAT_S_000200_00_000100_000171.mp4",
-  "note": "Same 70s VIRAT clip, frame_skip=15 (141 frames), yolov8n, CPU. DeepSORT = separate YOLO detect + re-ID tracker; ByteTrack = single YOLO.track() pass.",
+  "note": "Same 70s VIRAT clip, frame_skip=15 (141 frames), yolov8n, CPU. DeepSORT = separate YOLO detect + re-ID tracker (baseline). \"bytetrack\" backend = YOLO.predict() detection linked across frames by a custom greedy IOU tracker (models/ultralytics_tracker.py) -- NOT Ultralytics built-in persist=True tracking, which was found during debugging to silently drop most new-object detections on sparsely-sampled video (frames >0.3s apart); see git history / CLAUDE.md for the root-cause writeup. Higher unique_tracks + lower mean_track_len here reflect the simpler IOU-only linker creating a fresh ID more readily than a motion-model tracker would, in exchange for reliably finding every real detection.",
   "results": {
     "deepsort": {
-      "wall_sec": 98.2,
+      "wall_sec": 68.3,
       "unique_tracks": 8,
       "mean_track_len_frames": 71.6,
       "max_track_len_frames": 139,
@@ -13,13 +13,13 @@
       }
     },
     "bytetrack": {
-      "wall_sec": 67.7,
-      "unique_tracks": 8,
-      "mean_track_len_frames": 53.1,
+      "wall_sec": 49.6,
+      "unique_tracks": 27,
+      "mean_track_len_frames": 16.8,
       "max_track_len_frames": 141,
       "tracks_per_class": {
-        "car": 6,
-        "person": 2
+        "car": 17,
+        "person": 10
       }
     }
   }

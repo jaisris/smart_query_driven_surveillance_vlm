@@ -79,7 +79,7 @@ Every pipeline stage has a baseline and an upgraded backend, switchable in `conf
 | Component | Baseline | Upgrade option |
 |-----------|----------|----------------|
 | Object Detection | [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics) | [YOLO-World v2](https://docs.ultralytics.com/models/yolo-world) open-vocabulary (query-aware boxes) |
-| Multi-Object Tracking | [DeepSORT Realtime](https://github.com/levan92/deep_sort_realtime) | ByteTrack / BoT-SORT ([Ultralytics track mode](https://docs.ultralytics.com/modes/track)) — **default** |
+| Multi-Object Tracking | [DeepSORT Realtime](https://github.com/levan92/deep_sort_realtime) | YOLO detection + custom greedy IOU linker (`models/ultralytics_tracker.py`) — **default** |
 | Vision-Language Model | [CLIP ViT-B/32](https://huggingface.co/openai/clip-vit-base-patch32) — **default** | [SigLIP 2](https://huggingface.co/google/siglip2-base-patch16-224) (`clip.model_name`) |
 | Similarity Search | [FAISS](https://github.com/facebookresearch/faiss) | — |
 | Anomaly Detection | Rule-based + CLIP zero-shot | [VadCLIP (AAAI 2024)](https://github.com/nwpu-zxr/VadCLIP) (weights required) |
@@ -91,10 +91,28 @@ Every pipeline stage has a baseline and an upgraded backend, switchable in `conf
 
 | Tracking backend | Wall time | Tracks | Persons found | Max track length |
 |------------------|-----------|--------|---------------|------------------|
-| DeepSORT (baseline) | 98.2 s | 8 | 1 | 139/141 frames |
-| **ByteTrack** (default) | **67.7 s** | 8 | **2** | **141/141 frames** |
+| DeepSORT (baseline) | 68.3 s | 8 | 1 | 139/141 frames |
+| **IOU-linked** (default) | **49.6 s** | 27 | **10** | 141/141 frames |
 
 (Full numbers in [Docs/tracker_comparison.json](Docs/tracker_comparison.json); reproduce with `python run_tracker_ablation.py`.)
+
+#### A debugging note worth reading
+
+The default backend was originally built on Ultralytics' `model.track(persist=True)` (ByteTrack/BoT-SORT).
+While testing on a 45-minute video, several people clearly visible in retrieved frames had no bounding
+box at all. Root-causing it end to end (not just patching the symptom) showed that `persist=True`
+tracking silently drops most new-object detections after as little as **one** prior call, when frames
+are sampled sparsely (>0.3s apart — the norm for any video long enough to trigger adaptive frame skip).
+A fresh model reliably found a person at 0.87 confidence; the *same* model, having made even a single
+earlier tracking call on a different frame, found nothing there — and the degradation carried over even
+to a plain `.predict()` call afterward. Ultralytics' own [`Docs/models/yolo-world`](https://docs.ultralytics.com/modes/track)
+tracker configs are tuned for near-continuous ~30fps video; our multi-second sampling gaps violate that
+assumption badly enough to break its motion gating. Plain `.predict()` stayed reliable across 285
+repeated calls in testing, so detection uses that; frame-to-frame continuity is now provided by a small,
+fully-owned greedy IOU linker (`models/ultralytics_tracker.py`) instead of Ultralytics' internal tracker
+state. Net effect on the 45-minute MEVA demo video: unique tracks went from **4** (3 parked cars + one
+3-frame person fragment) to **119** (53 cars, 54 people, 12 trucks) — a realistic count for 45 minutes
+of a bus-stop camera.
 
 ### Measured encoder comparison — UCF-Crime zero-shot anomaly AUC-ROC
 

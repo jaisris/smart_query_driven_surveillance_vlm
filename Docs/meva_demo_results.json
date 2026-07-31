@@ -3,9 +3,9 @@
   "duration_min": 45.0,
   "frames_total": 81061,
   "frames_indexed": 501,
-  "unique_tracks": 4,
+  "unique_tracks": 119,
   "anomaly_events": 0,
-  "pipeline_wall_min": 18.8,
+  "pipeline_wall_min": 22.3,
   "queries": [
     {
       "query": "people waiting at a bus stop",

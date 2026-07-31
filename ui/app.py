@@ -200,6 +200,7 @@ def _init_state():
         "pipeline_from_cache": False,
         "query_text": "",
         "timeline": None,
+        "frame_render_cache": {},
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -319,11 +320,39 @@ def _draw_tracks(
             color     = _CLASS_COLORS.get(cls, (200, 200, 200))
             thickness = _CLASS_THICKNESS.get(cls, 1)
             cv2.rectangle(frame_bgr, (x1, y1), (x2, y2), color, thickness)
+            # Negative IDs are single-frame detections that never got a
+            # persistent track ID (see ultralytics_tracker.py) — label them
+            # without a confusing negative number.
+            label = f"{cls[:3].upper()}:{track_id}" if track_id >= 0 else cls[:3].upper()
             cv2.putText(
-                frame_bgr, f"{cls[:3].upper()}:{track_id}",
+                frame_bgr, label,
                 (x1, max(y1 - 4, 0)),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1,
             )
+
+
+def _relevance_pct(raw_score: float) -> int:
+    """Map a raw CLIP cosine similarity to an intuitive 0-100% relevance score.
+
+    CLIP's contrastive training compresses matching image-text pairs into a
+    narrow cosine-similarity band (typically ~0.20-0.35) rather than the
+    0-1 range a "similarity" label implies — a documented effect of its
+    temperature-scaled loss (Radford et al., 2021). Showing raw cosine values
+    reads as "barely matching" even for the best hit. We min-max normalise
+    against THIS query's own full-video score distribution (every indexed
+    frame, not just the shown segments) so the strongest moments read near
+    100% and background/non-matches read near 0% — without fabricating the
+    underlying metric. The raw cosine score is still shown alongside it.
+    """
+    tl = st.session_state.get("timeline")
+    scores = tl.get("scores") if tl else None
+    if not scores:
+        return int(min(max(raw_score, 0.0), 1.0) * 100)
+    lo, hi = min(scores), max(scores)
+    if hi - lo < 1e-6:
+        return 50
+    pct = (raw_score - lo) / (hi - lo) * 100
+    return int(min(max(pct, 0), 100))
 
 
 _OPEN_VOCAB_COLOR = (255, 0, 255)   # magenta (BGR) — visually distinct from class colours
@@ -796,6 +825,9 @@ if st.session_state.get("search_btn") and query and st.session_state.pipeline_re
             _app_logger.info("Localised %d segments", len(segments))
             st.session_state.search_results = results
             st.session_state.video_segments = segments
+            # New search → old cached renders (drawn boxes, open-vocab detections)
+            # are for a different query and must not be reused.
+            st.session_state.frame_render_cache = {}
 
             # Full similarity timeline: query vs every indexed frame — one matmul.
             _sims = _pr.embedding_matrix @ q_vec
@@ -845,6 +877,7 @@ if st.session_state.video_segments is not None:
                 _tl_df = pd.DataFrame({
                     "time_min": [t / 60.0 for t in _tl["timestamps"]],
                     "similarity": _tl["scores"],
+                    "relevance_pct": [_relevance_pct(s) for s in _tl["scores"]],
                 })
                 base = alt.Chart(_tl_df).mark_area(
                     line={"color": "#3b82f6"},
@@ -856,13 +889,14 @@ if st.session_state.video_segments is not None:
                     ),
                 ).encode(
                     x=alt.X("time_min:Q", title="Video time (minutes)"),
-                    y=alt.Y("similarity:Q", title="Cosine similarity",
-                            scale=alt.Scale(zero=False)),
+                    y=alt.Y("relevance_pct:Q", title="Relevance %",
+                            scale=alt.Scale(domain=[0, 100])),
                     tooltip=[alt.Tooltip("time_min:Q", format=".2f", title="min"),
-                             alt.Tooltip("similarity:Q", format=".3f")],
+                             alt.Tooltip("relevance_pct:Q", format=".0f", title="relevance %"),
+                             alt.Tooltip("similarity:Q", format=".3f", title="cosine")],
                 )
                 threshold = alt.Chart(
-                    pd.DataFrame({"y": [_tl.get("min_score", 0.2)]})
+                    pd.DataFrame({"y": [_relevance_pct(_tl.get("min_score", 0.2))]})
                 ).mark_rule(color="#ef4444", strokeDash=[5, 4]).encode(y="y:Q")
 
                 layers = [base, threshold]
@@ -889,8 +923,9 @@ if st.session_state.video_segments is not None:
                     use_container_width=True,
                 )
                 st.caption(
-                    f'Similarity of "{_tl["query"]}" across the full video · '
-                    "green bands = matched segments · red dashes = score threshold"
+                    f'Relevance of "{_tl["query"]}" across the full video · '
+                    "green bands = matched segments · red dashes = score threshold · "
+                    "hover a point for the raw cosine score"
                     + (" · orange lines = anomaly events" if _anoms else "")
                 )
             except Exception as _tl_exc:
@@ -900,17 +935,17 @@ if st.session_state.video_segments is not None:
             st.info("No segments matched. Try adjusting search params or rephrasing the query.")
 
         for i, seg in enumerate(segments[:10]):
-            bar_pct = min(int(seg.peak_score * 100), 100)
+            bar_pct = _relevance_pct(seg.peak_score)
 
             with st.expander(
                 f"Segment {i + 1}  ·  {seg.start_sec:.1f}s – {seg.end_sec:.1f}s"
-                f"  ·  {seg.duration_sec:.1f}s  ·  score {seg.peak_score:.3f}",
+                f"  ·  {seg.duration_sec:.1f}s  ·  {bar_pct}% relevant",
                 expanded=(i == 0),
             ):
                 st.markdown(f"""
 <div class="seg-header">
   <span class="seg-title">Segment {i + 1} of {len(segments)}</span>
-  <span class="seg-badge">Score: {seg.peak_score:.3f}</span>
+  <span class="seg-badge">{bar_pct}% relevant <span style="opacity:.65;font-weight:500;">(cosine {seg.peak_score:.3f})</span></span>
 </div>
 <div class="seg-meta">
   ⏱ {seg.start_sec:.1f}s – {seg.end_sec:.1f}s &nbsp;·&nbsp;
@@ -924,66 +959,85 @@ if st.session_state.video_segments is not None:
 
                 if st.session_state.video_path and os.path.exists(st.session_state.video_path):
                     try:
-                        frames_to_show   = min(4, len(seg.frame_indices))
-                        step             = max(1, len(seg.frame_indices) // frames_to_show)
-                        selected_indices = seg.frame_indices[::step][:frames_to_show]
+                        # Render once per search, not once per widget interaction — any
+                        # checkbox click anywhere on the page triggers a full Streamlit
+                        # rerun, and re-drawing boxes + re-running YOLO-World open-vocab
+                        # detection on every rerun (for all 10 segments, every time) is
+                        # what caused the UI to hang after clicking "Play this segment".
+                        _cached_render = st.session_state.frame_render_cache.get(i)
 
-                        img_cols  = st.columns(len(selected_indices))
-                        cap       = cv2.VideoCapture(st.session_state.video_path)
-                        pr: PipelineResult = st.session_state.pipeline_result
-                        _q_text   = st.session_state.get("query_text", "").lower()
-                        _highlight = _query_highlight_classes(_q_text)
+                        if _cached_render is None:
+                            frames_to_show   = min(4, len(seg.frame_indices))
+                            step             = max(1, len(seg.frame_indices) // frames_to_show)
+                            selected_indices = seg.frame_indices[::step][:frames_to_show]
 
-                        # Determine track-level filter mode
-                        _is_collision = any(kw in _q_text for kw in _COLLISION_KEYWORDS)
-                        _color_target = next(
-                            (c for c in _COLOR_MASKS_BGR if c in _q_text), None
-                        )
+                            cap       = cv2.VideoCapture(st.session_state.video_path)
+                            pr: PipelineResult = st.session_state.pipeline_result
+                            _q_text   = st.session_state.get("query_text", "").lower()
+                            _highlight = _query_highlight_classes(_q_text)
 
-                        # Query-aware open-vocab boxes: top segment only (CPU cost)
-                        _ov_detector = None
-                        _ov_vocab: list = []
-                        if i == 0 and _q_text and get_config().retrieval.query_aware_detection:
-                            from models.open_vocab_detector import query_to_vocabulary
-                            _ov_vocab = query_to_vocabulary(_q_text)
-                            if _ov_vocab:
-                                _ov_detector = _cached_open_vocab()
-
-                        for col, frame_idx in zip(img_cols, selected_indices):
-                            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-                            ret, frame_bgr = cap.read()
-                            if ret:
-                                try:
-                                    if _is_collision:
-                                        _tids = _collision_track_ids(frame_idx, pr)
-                                    elif _color_target:
-                                        _tids = _color_car_track_ids(
-                                            frame_bgr, frame_idx, pr, _color_target
-                                        )
-                                    else:
-                                        _tids = None
-                                    _draw_tracks(frame_bgr, frame_idx, pr,
-                                                 highlight_classes=_highlight,
-                                                 highlight_track_ids=_tids)
-                                    if _ov_detector is not None:
-                                        _draw_open_vocab(
-                                            frame_bgr,
-                                            _ov_detector.detect(frame_bgr, _ov_vocab),
-                                        )
-                                except Exception:
-                                    pass
-                                frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-                                col.image(
-                                    Image.fromarray(frame_rgb),
-                                    caption=f"t = {frame_idx / pr.video_metadata.fps:.1f}s",
-                                    use_column_width=True,
-                                )
-                        cap.release()
-                        if _ov_detector is not None:
-                            st.caption(
-                                "🟣 Magenta boxes: YOLO-World open-vocabulary detections "
-                                f"for your query terms ({', '.join(_ov_vocab[1:] or _ov_vocab)})"
+                            # Determine track-level filter mode
+                            _is_collision = any(kw in _q_text for kw in _COLLISION_KEYWORDS)
+                            _color_target = next(
+                                (c for c in _COLOR_MASKS_BGR if c in _q_text), None
                             )
+
+                            # Query-aware open-vocab boxes: top segment only (CPU cost)
+                            _ov_detector = None
+                            _ov_vocab: list = []
+                            if i == 0 and _q_text and get_config().retrieval.query_aware_detection:
+                                from models.open_vocab_detector import query_to_vocabulary
+                                _ov_vocab = query_to_vocabulary(_q_text)
+                                if _ov_vocab:
+                                    _ov_detector = _cached_open_vocab()
+
+                            _images = []
+                            for frame_idx in selected_indices:
+                                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+                                ret, frame_bgr = cap.read()
+                                if ret:
+                                    try:
+                                        if _is_collision:
+                                            _tids = _collision_track_ids(frame_idx, pr)
+                                        elif _color_target:
+                                            _tids = _color_car_track_ids(
+                                                frame_bgr, frame_idx, pr, _color_target
+                                            )
+                                        else:
+                                            _tids = None
+                                        _draw_tracks(frame_bgr, frame_idx, pr,
+                                                     highlight_classes=_highlight,
+                                                     highlight_track_ids=_tids)
+                                        if _ov_detector is not None:
+                                            _draw_open_vocab(
+                                                frame_bgr,
+                                                _ov_detector.detect(frame_bgr, _ov_vocab),
+                                            )
+                                    except Exception:
+                                        pass
+                                    frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+                                    _images.append((
+                                        Image.fromarray(frame_rgb),
+                                        f"t = {frame_idx / pr.video_metadata.fps:.1f}s",
+                                    ))
+                            cap.release()
+
+                            _ov_caption = None
+                            if _ov_detector is not None:
+                                _ov_caption = (
+                                    "🟣 Magenta boxes: YOLO-World open-vocabulary detections "
+                                    f"for your query terms ({', '.join(_ov_vocab[1:] or _ov_vocab)})"
+                                )
+
+                            _cached_render = {"images": _images, "ov_caption": _ov_caption}
+                            st.session_state.frame_render_cache[i] = _cached_render
+
+                        if _cached_render["images"]:
+                            img_cols = st.columns(len(_cached_render["images"]))
+                            for col, (img, caption) in zip(img_cols, _cached_render["images"]):
+                                col.image(img, caption=caption, use_column_width=True)
+                        if _cached_render["ov_caption"]:
+                            st.caption(_cached_render["ov_caption"])
 
                         # Click-to-play: embedded player that jumps to this segment
                         if st.checkbox(
