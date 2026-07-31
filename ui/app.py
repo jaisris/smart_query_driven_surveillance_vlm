@@ -33,6 +33,27 @@ from utils.config_loader import get_config
 from utils.types import AnomalyEvent, PipelineResult, VideoSegment
 
 
+def _resize_to_pipeline_resolution(frame_bgr: np.ndarray) -> np.ndarray:
+    """Match VideoLoader.iter_frames()'s resize so bbox_xyxy coordinates
+    (computed by the detector on the resized frame) land in the right place.
+
+    Detection/tracking runs on frames capped at config.video.max_resolution
+    (e.g. 1280x720), but the UI reads frames directly from the video file at
+    native resolution (e.g. 1920x1080 for the MEVA demo video) for display.
+    Drawing bbox_xyxy values from the smaller coordinate space directly onto
+    the larger native frame shifts every box toward the top-left — worse the
+    further the object is from the frame's origin. Resizing the displayed
+    frame identically before drawing keeps boxes pixel-aligned with what was
+    actually detected.
+    """
+    max_w, max_h = get_config().video.max_resolution
+    h, w = frame_bgr.shape[:2]
+    if w > max_w or h > max_h:
+        scale = min(max_w / w, max_h / h)
+        frame_bgr = cv2.resize(frame_bgr, (int(w * scale), int(h * scale)))
+    return frame_bgr
+
+
 def _extract_segment_clip(video_path: str, start_sec: float, end_sec: float) -> str | None:
     """Cut a short standalone clip for one segment via ffmpeg stream-copy.
 
@@ -1033,6 +1054,7 @@ if st.session_state.video_segments is not None:
                                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
                                 ret, frame_bgr = cap.read()
                                 if ret:
+                                    frame_bgr = _resize_to_pipeline_resolution(frame_bgr)
                                     try:
                                         if _is_collision:
                                             _tids = _collision_track_ids(frame_idx, pr)
@@ -1156,6 +1178,7 @@ if st.session_state.pipeline_result is not None:
                                 _anom_cap.set(cv2.CAP_PROP_POS_FRAMES, _target_frame)
                                 _ret, _frame_bgr = _anom_cap.read()
                                 if _ret:
+                                    _frame_bgr = _resize_to_pipeline_resolution(_frame_bgr)
                                     # Draw closest bbox for this track
                                     _track_snaps = _anom_result.track_histories.get(e.track_id, [])
                                     _best_snap = None
