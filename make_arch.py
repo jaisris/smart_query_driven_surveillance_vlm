@@ -62,8 +62,8 @@ def orth(pts, color=ARROW, lw=2.0, dashed=False):
 xm = 30
 b_in = box(xm, 93, 30, 6.5, "Input Surveillance Video", kind="input")
 b_load = box(xm, 81, 30, 8, "VideoLoader", "adaptive frame sampling (OpenCV, streaming)", "data")
-b_fp = box(xm, 67.5, 32, 9, "FrameProcessor", "YOLOv8 detection + DeepSORT tracking", "model")
-b_emb = box(xm, 54, 32, 8.5, "EmbeddingBuilder", "streaming CLIP encode · static-frame skip", "model")
+b_fp = box(xm, 67.5, 32, 9, "FrameProcessor", "YOLOv8 + IOU-linked tracking (default) / DeepSORT", "model")
+b_emb = box(xm, 54, 32, 8.5, "EmbeddingBuilder", "streaming CLIP / SigLIP 2 encode · static-frame skip", "model")
 b_faiss = box(xm, 41, 32, 8, "FAISS  IndexFlatIP", "cosine-similarity search", "retr")
 b_loc = box(xm, 28, 32, 8.5, "TemporalLocalizer", "merge top-K frames into segments", "retr")
 b_ui = box(42, 10, 54, 8, "Streamlit User Interface", "segments, timestamps, scores, anomaly alerts", "ui")
@@ -74,7 +74,7 @@ straight((xm, b_loc["B"]), (xm, b_ui["T"]))   # localizer -> UI
 
 # ---------------- query lane (x = 72) ----------------
 b_q = box(72, 54, 26, 7.5, "Text Query", "natural language", "input")
-b_ce = box(72, 41, 26, 8, "CLIPEncoder", "query embedding (512-d)", "model")
+b_ce = box(72, 41, 26, 8, "CLIPEncoder", "query embedding (CLIP 512-d / SigLIP2 768-d)", "model")
 straight((72, b_q["B"]), (72, b_ce["T"]))
 straight((b_ce["L"], 41), (b_faiss["R"], 41), color="#188038")   # -> FAISS (level)
 

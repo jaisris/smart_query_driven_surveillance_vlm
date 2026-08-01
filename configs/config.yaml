@@ -18,7 +18,13 @@ yolo:
   open_vocab_model: "yolov8s-worldv2.pt"   # YOLO-World v2 for query-aware boxes on result frames
 
 tracking:
-  # "bytetrack" | "botsort"  → Ultralytics built-in tracking (detection+tracking in one pass)
+  # "bytetrack" | "botsort"  → YOLO.predict() detection + our own greedy IOU linker
+  #                            (models/ultralytics_tracker.py). NOT Ultralytics' built-in
+  #                            persist=True tracking: that mode was found to silently drop
+  #                            most new-object detections once sampled frames are more than
+  #                            ~0.3s apart (the norm once adaptive frame skip kicks in on
+  #                            long videos), so it is deliberately not used. Both config
+  #                            values currently behave identically.
   # "deepsort"               → original DeepSORT baseline (separate YOLO detect + re-ID tracker)
   backend: "bytetrack"
 
