@@ -1,0 +1,194 @@
+{
+  "gpu": "Tesla T4",
+  "cuda_version": "12.8",
+  "torch_version": "2.11.0+cu128",
+  "device_used": "cuda",
+  "video": "MEVA_bus_G340_45min.mp4",
+  "duration_min": 45.0,
+  "frames_total": 81061,
+  "frames_decoded": 3861,
+  "frames_indexed": 501,
+  "unique_tracks": 119,
+  "anomaly_events": 0,
+  "config": {
+    "tracker_backend": "bytetrack",
+    "clip_model": "openai/clip-vit-base-patch32",
+    "frame_skip": 15,
+    "max_indexed_frames": 4000,
+    "batch_size": 32,
+    "yolo_model": "yolov8n.pt"
+  },
+  "indexing": {
+    "wall_sec": 509.1,
+    "wall_min": 8.49,
+    "stage_sec": {
+      "decode_sec": 395.5,
+      "detect_track_sec": 49.9,
+      "clip_encode_sec": 11.0,
+      "other_sec": 52.7
+    },
+    "throughput": {
+      "decode_fps": 9.8,
+      "detect_track_fps": 77.4,
+      "clip_encode_fps": 45.4,
+      "sampled_frames_per_sec_end_to_end": 7.6,
+      "video_sec_indexed_per_wall_sec": 5.3
+    }
+  },
+  "query_latency_ms": {
+    "people waiting at a bus stop": {
+      "mean_ms": 43.7,
+      "median_ms": 42.6,
+      "min_ms": 38.3,
+      "max_ms": 57.3
+    },
+    "a bus arriving": {
+      "mean_ms": 38.4,
+      "median_ms": 37.7,
+      "min_ms": 35.7,
+      "max_ms": 43.7
+    },
+    "a person walking alone": {
+      "mean_ms": 41.7,
+      "median_ms": 41.5,
+      "min_ms": 36.0,
+      "max_ms": 51.0
+    },
+    "a group of people talking": {
+      "mean_ms": 41.8,
+      "median_ms": 42.0,
+      "min_ms": 39.0,
+      "max_ms": 45.0
+    },
+    "a car driving past": {
+      "mean_ms": 46.0,
+      "median_ms": 44.1,
+      "min_ms": 38.0,
+      "max_ms": 54.9
+    }
+  },
+  "query_latency_overall_median_ms": 41.9,
+  "queries": [
+    {
+      "query": "people waiting at a bus stop",
+      "top3": [
+        {
+          "start": 695.1,
+          "end": 697.2,
+          "score": 0.2779
+        },
+        {
+          "start": 690.2,
+          "end": 693.0,
+          "score": 0.2748
+        },
+        {
+          "start": 192.5,
+          "end": 195.3,
+          "score": 0.2702
+        }
+      ]
+    },
+    {
+      "query": "a bus arriving",
+      "top3": [
+        {
+          "start": 690.9,
+          "end": 692.3,
+          "score": 0.2881
+        },
+        {
+          "start": 2508.8,
+          "end": 2508.8,
+          "score": 0.2876
+        },
+        {
+          "start": 2369.5,
+          "end": 2369.5,
+          "score": 0.2875
+        }
+      ]
+    },
+    {
+      "query": "a person walking alone",
+      "top3": [
+        {
+          "start": 193.9,
+          "end": 197.4,
+          "score": 0.3039
+        },
+        {
+          "start": 58.8,
+          "end": 58.8,
+          "score": 0.2835
+        },
+        {
+          "start": 215.6,
+          "end": 215.6,
+          "score": 0.2834
+        }
+      ]
+    },
+    {
+      "query": "a group of people talking",
+      "top3": [
+        {
+          "start": 690.2,
+          "end": 692.3,
+          "score": 0.2595
+        },
+        {
+          "start": 192.5,
+          "end": 195.3,
+          "score": 0.2569
+        },
+        {
+          "start": 695.1,
+          "end": 697.9,
+          "score": 0.2568
+        }
+      ]
+    },
+    {
+      "query": "a car driving past",
+      "top3": [
+        {
+          "start": 2158.1,
+          "end": 2159.5,
+          "score": 0.2805
+        },
+        {
+          "start": 2543.8,
+          "end": 2543.8,
+          "score": 0.2763
+        },
+        {
+          "start": 632.8,
+          "end": 632.8,
+          "score": 0.2759
+        }
+      ]
+    }
+  ],
+  "cpu_baselines_from_report": {
+    "meva_45min_indexing_wall_min": 22.3,
+    "traffic_clip_58s_cold_sec": 132,
+    "virat_70s_deepsort_sec": 98.2,
+    "virat_70s_bytetrack_sec": 67.7,
+    "query_latency_ms_range": [
+      90,
+      140
+    ]
+  },
+  "cpu_vs_gpu": {
+    "workload": "45-min MEVA video, identical config (frame_skip, tracker, encoder)",
+    "cpu_wall_min": 22.3,
+    "gpu_wall_min": 8.49,
+    "indexing_speedup_x": 2.6,
+    "cpu_query_latency_ms_range": [
+      90,
+      140
+    ],
+    "gpu_query_latency_median_ms": 41.9
+  }
+}
