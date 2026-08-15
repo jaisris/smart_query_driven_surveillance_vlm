@@ -56,7 +56,10 @@ anomaly:
 
   loitering:
     dwell_radius_px: 80        # spatial radius to consider "staying in place"
-    dwell_time_sec: 30.0       # how long before flagging as loitering
+    dwell_time_sec: 15.0       # how long before flagging as loitering (15.0 for the short viva demo
+                                # clips below 3 min, e.g. data/videos/demo_real_theft.mp4 where the
+                                # suspect's real dwell is ~28.8s; report Table 16 used 30.0 for the
+                                # 45-min MEVA video)
     person_only: true          # only flag "person" class tracks (avoids parked-car false positives)
 
   intrusion:
