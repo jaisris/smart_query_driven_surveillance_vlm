@@ -19,10 +19,23 @@ from pipeline.video_pipeline import VideoPipeline
 from retrieval.query_encoder import QueryEncoder
 from retrieval.similarity_search import SimilaritySearch
 from retrieval.temporal_localizer import localize_segments
+from utils.config_loader import get_config
 
 VIDEO = sys.argv[1]
 OUT_JSON = sys.argv[2]
 LABEL = sys.argv[3] if len(sys.argv) > 3 else os.path.basename(VIDEO)
+
+# At the default max_indexed_frames=4000, a ~55-min combined video (~100k raw
+# frames) forces effective_skip up from 15 to ~26 (see
+# VideoPipeline._effective_frame_skip). That sparser sampling is enough to
+# break DeepSORT/IOU track continuity on short (<30s) loitering-during-theft
+# behavior that the same clip reliably caught standalone at skip=15 (see
+# Docs/demo_realtheft_results.json). Raised only here (not in
+# configs/config.yaml) so the dissertation's already-reported capacity/speed
+# numbers at the default 4000 stay untouched; effective_skip is part of the
+# cache key so this doesn't collide with caches built at the default.
+config = get_config()
+config.pipeline.max_indexed_frames = 8000
 
 print(f"[{LABEL}] Hashing {VIDEO} ...", flush=True)
 h = hashlib.sha256()
@@ -33,7 +46,7 @@ content_hash = h.hexdigest()
 print(f"[{LABEL}] content_hash:", content_hash[:16], flush=True)
 
 t0 = time.time()
-result = VideoPipeline().run(VIDEO, content_hash=content_hash)
+result = VideoPipeline(config).run(VIDEO, content_hash=content_hash)
 wall = time.time() - t0
 print(f"[{LABEL}] pipeline wall: {wall:.1f}s ({wall/60:.1f} min)", flush=True)
 
